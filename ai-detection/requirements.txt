@@ -1,0 +1,10 @@
+fastapi==0.95.2
+uvicorn[standard]==0.22.0
+python-multipart==0.0.6
+ultralytics==8.0.20
+# ultralytics requires torch; install torch separately matching your CUDA or CPU setup.
+# Example for CPU-only environment:
+# pip install torch==2.2.0+cpu -f https://download.pytorch.org/whl/torch_stable.htmlfastapi
+uvicorn[standard]
+python-multipart
+ultralytics
