@@ -5,8 +5,7 @@ venv/
 env/
 
 # Model files (do not track large binaries in repo)
-*.pt
-models/
+
 
 # OS / Editor
 .DS_Store
