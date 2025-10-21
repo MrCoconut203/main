@@ -1,2 +1,7 @@
 --find-links https://download.pytorch.org/whl/torch_stable.html
 torch==2.2.0+cpu
+
+# Pin NumPy to <2 to avoid ABI incompatibilities with many binary extensions compiled
+# against NumPy 1.x. This is the recommended long-term fix; rebuild the image
+# using `docker compose build --no-cache` after this change.
+numpy<2
