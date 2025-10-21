@@ -11,6 +11,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     apt-transport-https \
     build-essential \
     libgl1 \
+    ffmpeg \
+    libsm6 \
+    libxext6 \
+    libxrender1 \
+    libglib2.0-0 \
+    libjpeg-dev \
+    libsndfile1 \
+    libopenblas-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy app, frontend and requirements (assume build context = ./ai-detection)
