@@ -2,9 +2,10 @@ fastapi==0.95.2
 uvicorn[standard]==0.22.0
 python-multipart==0.0.6
 ultralytics==8.0.20
-# ultralytics requires torch; install torch separately matching your CUDA or CPU setup.
-# Example for CPU-only environment:
-# pip install torch==2.2.0+cpu -f https://download.pytorch.org/whl/torch_stable.htmlfastapi
-uvicorn[standard]
-python-multipart
-ultralytics
+
+# NOTE: ultralytics depends on PyTorch. Installing torch can be platform-specific.
+# For a CPU-only build we pin the CPU wheel. If you have CUDA, replace this with a
+# matching CUDA wheel from https://download.pytorch.org/whl/torch_stable.html
+# The Dockerfile installs this wheel before installing the rest of requirements.
+# Do NOT add torch here; it's installed explicitly in the Dockerfile to ensure
+# pip pulls the correct prebuilt wheel instead of trying to build from source.
