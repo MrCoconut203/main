@@ -26,6 +26,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY app/ ./app/
 COPY frontend/ ./frontend/
 COPY requirements.txt ./requirements.txt
+COPY constraints.txt ./constraints.txt
 # copy models from the ai-detection folder (if present)
 COPY models/ ./models/
 
@@ -38,7 +39,7 @@ RUN pip install --upgrade pip setuptools wheel
 RUN pip install --no-cache-dir "torch==2.2.0+cpu" -f https://download.pytorch.org/whl/torch_stable.html
 
 # Now install the rest of the requirements
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt -c constraints.txt
 
 EXPOSE 8000
 
