@@ -1,7 +1,9 @@
+
 fastapi==0.95.2
 uvicorn[standard]==0.22.0
 python-multipart==0.0.6
-ultralytics==8.0.20
+# Allow a compatible ultralytics version to be selected from PyPI
+ultralytics>=8.0.0,<9.0
 
 # NOTE: ultralytics depends on PyTorch. Installing torch can be platform-specific.
 # For a CPU-only build we pin the CPU wheel. If you have CUDA, replace this with a
