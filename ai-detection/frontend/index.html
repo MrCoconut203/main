@@ -67,18 +67,37 @@
       const formData = new FormData();
       formData.append("file", file);
 
-      const res = await fetch("http://127.0.0.1:8000/predict/", {
-        method: "POST",
-        body: formData,
-      });
-      
-      loadingElement.style.display = "none";
-      const data = await res.json();
-      
-      // Hiển thị kết quả
-      resultContainer.style.display = "block";
-      document.getElementById("resultDescription").innerText = data.description;
-      document.getElementById("resultImage").src = `data:image/jpeg;base64,${data.image_base64}`;
+      try {
+        const res = await fetch("/predict/", {
+          method: "POST",
+          body: formData,
+        });
+
+        loadingElement.style.display = "none";
+
+        if (!res.ok) {
+          // try to show json error or text
+          let errText = await res.text();
+          try { errText = JSON.stringify(JSON.parse(errText), null, 2); } catch(e) {}
+          alert(`Server returned ${res.status}: ${errText}`);
+          return;
+        }
+
+        const data = await res.json();
+
+        // Hiển thị kết quả (bảo vệ các trường không tồn tại)
+        resultContainer.style.display = "block";
+        document.getElementById("resultDescription").innerText = data.description || 'No description';
+        if (data.image_base64) {
+          document.getElementById("resultImage").src = `data:image/jpeg;base64,${data.image_base64}`;
+        } else {
+          document.getElementById("resultImage").src = '';
+        }
+      } catch (err) {
+        loadingElement.style.display = "none";
+        alert('Request failed: ' + err);
+        console.error(err);
+      }
     };
   </script>
 </body>
