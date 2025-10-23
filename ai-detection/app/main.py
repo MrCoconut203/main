@@ -67,6 +67,18 @@ app.add_middleware(
 )
 
 
+# Simple request logging middleware to help debug Method/Path/Origin on Render
+@app.middleware("http")
+async def log_requests(request, call_next):
+    import logging
+    client = request.client.host if request.client else "-"
+    logging.info("Incoming request %s %s from %s", request.method, request.url.path, client)
+    logging.debug("Request headers: %s", dict(request.headers))
+    response = await call_next(request)
+    logging.info("Response %s %s -> %s", request.method, request.url.path, response.status_code)
+    return response
+
+
 def process_prediction_results(result: Any, speed_text: str) -> Tuple[Dict[str, int], str]:
     """Xử lý kết quả từ model YOLO để lấy summary và description."""
     # result.boxes.cls có thể là tensor; chuyển thành list
@@ -103,6 +115,21 @@ async def health():
     return {"status": "ok"}
 
 
+# OPTIONS handler to satisfy CORS preflight or probes that may hit /predict/
+from fastapi.responses import PlainTextResponse
+
+
+@app.options("/predict/")
+async def predict_options():
+    return PlainTextResponse("ok", status_code=200)
+
+
+@app.get("/predict/")
+async def predict_get():
+    # Helpful message for GET requests (not used for actual prediction)
+    return {"detail": "Use POST /predict/ with multipart/form-data field 'file' to upload an image."}
+
+
 @app.post("/predict/", response_model=PredictionResponse)
 async def predict(file: UploadFile = File(...)):
     # Tạo một thư mục tạm thời duy nhất cho mỗi request
@@ -118,11 +145,11 @@ async def predict(file: UploadFile = File(...)):
                 shutil.copyfileobj(file.file, f)
 
             # Predict
-                if model is None:
-                    # Model not available yet (startup failure or still loading)
-                    raise HTTPException(status_code=503, detail="Model not loaded yet")
+            if model is None:
+                # Model not available yet (startup failure or still loading)
+                raise HTTPException(status_code=503, detail="Model not loaded yet")
 
-                results = model.predict(str(input_image_path), save=True, project=temp_dir, name="results", exist_ok=True)
+            results = model.predict(str(input_image_path), save=True, project=temp_dir, name="results", exist_ok=True)
             result = results[0]
 
             # Lấy tốc độ xử lý
@@ -148,5 +175,7 @@ async def predict(file: UploadFile = File(...)):
             )
         except FileNotFoundError as e:
             raise HTTPException(status_code=404, detail=str(e))
+        except HTTPException:
+            raise
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Đã xảy ra lỗi khi xử lý ảnh: {e}")
