@@ -5,8 +5,11 @@ services:
     restart: always
     volumes:
       - ./models:/app/models
-    ports:
-      - "8000:8000"
+    # Expose port 8000 only to other services on the docker-compose network
+    # (do not publish to the host). This forces external traffic to go through nginx
+    # which listens on host port 80/443 and proxies to the `web` service.
+    expose:
+      - "8000"
 
   nginx:
     image: nginx:stable
