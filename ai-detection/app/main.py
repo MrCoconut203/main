@@ -29,12 +29,28 @@ class PredictionResponse(BaseModel):
 app = FastAPI()
 
 # Serve frontend static files so the same container image can serve the SPA
-# (useful for single-image deployments like Render). If `frontend/` is present
-# in the image or mounted at runtime, this will serve it at `/` and fall back
-# to `index.html` for SPA routes.
+# (useful for single-image deployments like Render). Mount static files under
+# `/static` so API routes (like /predict/) are not shadowed by StaticFiles which
+# only supports GET/HEAD and would return 405 for POST requests. We also add
+# explicit routes to serve `index.html` for the SPA root and fallback.
 frontend_path = Path(__file__).resolve().parent.parent / "frontend"
 if frontend_path.exists():
-    app.mount("/", StaticFiles(directory=str(frontend_path), html=True), name="frontend")
+    app.mount("/static", StaticFiles(directory=str(frontend_path)), name="static")
+
+    from fastapi.responses import FileResponse
+
+    @app.get("/", include_in_schema=False)
+    async def root():
+        return FileResponse(frontend_path / "index.html")
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def spa_fallback(full_path: str):
+        # If the requested file exists in the frontend folder, serve it. Otherwise
+        # return index.html so the SPA client-side router can handle the path.
+        requested = frontend_path / full_path
+        if requested.exists() and requested.is_file():
+            return FileResponse(requested)
+        return FileResponse(frontend_path / "index.html")
 
 # Model is loaded lazily at startup to avoid importing heavy ML deps at module import time.
 # This makes tests and lightweight tools importable without requiring torch/ultralytics.
