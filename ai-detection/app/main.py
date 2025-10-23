@@ -51,6 +51,9 @@ def load_model_on_startup():
         # Log a warning; server can still start but /predict/ will return 503 until model is loaded.
         import logging
         logging.warning("Failed to load YOLO model on startup: %s", e)
+    # Log the PORT environment variable to help debugging on Render
+    import os, logging
+    logging.info("Startup: effective PORT=%s", os.getenv("PORT", "(not set)"))
 
 # CORS
 if ALLOWED_ORIGINS == "*":

@@ -43,7 +43,11 @@ RUN pip install --no-cache-dir "torch==2.2.0+cpu" -f https://download.pytorch.or
 RUN mkdir -p /app/.ultralytics \
     && pip install --no-cache-dir -r requirements.txt -c constraints.txt
 
+# Copy start script and make executable
+COPY start.sh /start.sh
+RUN chmod +x /start.sh
+
 EXPOSE 8000
 
 # Use the PORT provided by the hosting provider (Render sets $PORT). Fallback to 8000 locally.
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 2"]
+CMD ["/start.sh"]
