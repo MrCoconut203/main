@@ -5,3 +5,6 @@ torch==2.2.0+cpu
 # against NumPy 1.x. This is the recommended long-term fix; rebuild the image
 # using `docker compose build --no-cache` after this change.
 numpy<2
+# Pin a compatible opencv headless wheel to avoid metadata conflicts with numpy
+# We'll prefer headless for server use. You can adjust if you need GUI features.
+opencv-python-headless==4.8.0.76

@@ -1,5 +1,6 @@
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from ultralytics import YOLO
 from pathlib import Path
@@ -27,8 +28,29 @@ class PredictionResponse(BaseModel):
 
 app = FastAPI()
 
-# Tạo model lúc khởi động (đường dẫn có thể cấu hình qua biến môi trường)
-model = YOLO(MODEL_PATH)
+# Serve frontend static files so the same container image can serve the SPA
+# (useful for single-image deployments like Render). If `frontend/` is present
+# in the image or mounted at runtime, this will serve it at `/` and fall back
+# to `index.html` for SPA routes.
+frontend_path = Path(__file__).resolve().parent.parent / "frontend"
+if frontend_path.exists():
+    app.mount("/", StaticFiles(directory=str(frontend_path), html=True), name="frontend")
+
+# Model is loaded lazily at startup to avoid importing heavy ML deps at module import time.
+# This makes tests and lightweight tools importable without requiring torch/ultralytics.
+model = None
+
+
+@app.on_event("startup")
+def load_model_on_startup():
+    global model
+    try:
+        from ultralytics import YOLO
+        model = YOLO(MODEL_PATH)
+    except Exception as e:
+        # Log a warning; server can still start but /predict/ will return 503 until model is loaded.
+        import logging
+        logging.warning("Failed to load YOLO model on startup: %s", e)
 
 # CORS
 if ALLOWED_ORIGINS == "*":
@@ -96,7 +118,11 @@ async def predict(file: UploadFile = File(...)):
                 shutil.copyfileobj(file.file, f)
 
             # Predict
-            results = model.predict(str(input_image_path), save=True, project=temp_dir, name="results", exist_ok=True)
+                if model is None:
+                    # Model not available yet (startup failure or still loading)
+                    raise HTTPException(status_code=503, detail="Model not loaded yet")
+
+                results = model.predict(str(input_image_path), save=True, project=temp_dir, name="results", exist_ok=True)
             result = results[0]
 
             # Lấy tốc độ xử lý

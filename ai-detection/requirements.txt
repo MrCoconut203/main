@@ -11,3 +11,5 @@ ultralytics>=8.0.0,<9.0
 # The Dockerfile installs this wheel before installing the rest of requirements.
 # Do NOT add torch here; it's installed explicitly in the Dockerfile to ensure
 # pip pulls the correct prebuilt wheel instead of trying to build from source.
+# Use headless OpenCV on the server to avoid GUI dependencies and reduce conflicts.
+opencv-python-headless==4.8.0.76

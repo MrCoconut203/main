@@ -2,6 +2,7 @@
 FROM python:3.11-slim-bookworm
 
 ENV DEBIAN_FRONTEND=noninteractive
+ENV YOLO_CONFIG_DIR=/app/.ultralytics
 
 WORKDIR /app
 
@@ -39,7 +40,8 @@ RUN pip install --upgrade pip setuptools wheel
 RUN pip install --no-cache-dir "torch==2.2.0+cpu" -f https://download.pytorch.org/whl/torch_stable.html
 
 # Now install the rest of the requirements
-RUN pip install --no-cache-dir -r requirements.txt -c constraints.txt
+RUN mkdir -p /app/.ultralytics \
+    && pip install --no-cache-dir -r requirements.txt -c constraints.txt
 
 EXPOSE 8000
 
