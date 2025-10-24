@@ -1,108 +1,108 @@
-प्रोजेक्ट: YOLOv8 + FastAPI के साथ ऑब्जेक्ट डिटेक्शन
+စီမံကိန်း – YOLOv8 + FastAPI နဲ့ အရာဝတ္ထုဖော်ထုတ်ခြင်း
 
-यह एप्लिकेशन एक API प्रदान करता है जो YOLOv8 मॉडल का उपयोग करके छवियों में ऑब्जेक्ट डिटेक्शन करता है। फ्रंटेंड एक साधारण SPA (HTML/JS) है और बैकएंड FastAPI सेवा है जो app/ में स्थित है।
+ဒီအက်ပလီကေးရှင်းဟာ ပုံများထဲမှာ YOLOv8 မော်ဒယ်ကို အသုံးပြုပြီး အရာဝတ္ထုဖော်ထုတ်နိုင်တဲ့ API တစ်ခု ပေးစွမ်းတယ်။ Frontend က HTML/JS ဖြင့်ပြုလုပ်ထားတဲ့ SPA ဆန်းရှင်းမှုဖြစ်ပြီး backend သည် FastAPI စနစ်ဖြင့် app/ ထဲမှာရှိတယ်။
 
-यह दस्तावेज़ एप्लिकेशन चलाने के दो तरीके बताता है — Docker द्वारा (डिप्लॉयमेंट के लिए अनुशंसित) और Python वर्चुअल वातावरण (virtualenv) द्वारा विकास के लिए।
+ဒီစာတမ်းထဲမှာ ဒီအက်ပလီကေးရှင်းကို ဘယ်လိုအတိုင်း ထည့်သုံးရမလဲဆိုတာကို Docker နဲ့ (deploy လုပ်ဖို့အတွက် အကြံပြု) နှင့် Python virtualenv ဖြင့် (ဖွံ့ဖြိုးရေးအတွက် / ဖျော်ဖြေရေးအတွက်) ဆိုပြီး နှစ်ဖက်လမ်းကြောင်း ဖော်ပြထားတယ်။
 
-मुख्य संरचना
+အဓိက ဖွဲ့စည်းပုံ
 
-app/ — FastAPI स्रोत कोड (एंट्रीपॉइंट: app/main.py)।
+app/ — FastAPI ရဲ့ source code (entry point: app/main.py)
 
-models/ — मॉडल yolov8s.pt रखता है (वास्तविक inference के लिए आवश्यक)।
+models/ — မော်ဒယ် yolov8s.pt ကို ထည့်သွင်းထားပြီး inference အသုံးပြုရန်လိုအပ်တယ်။
 
-frontend/ — SPA स्टैटिक फाइलें।
+frontend/ — SPA static ဖိုင်တွေ
 
-deploy/ — nginx / reverse proxy कॉन्फ़िगरेशन, docker-compose इत्यादि।
+deploy/ — nginx / reverse proxy configuration, docker-compose စသည်တို့
 
-requirements.txt, constraints.txt — Python dependencies (ध्यान दें: constraints.txt में numpy<2 प्रतिबंध है)।
+requirements.txt, constraints.txt — Python dependencies တွေ (မှတ်ချက်: constraints.txt ထဲမှာ numpy<2 ဆိုတဲ့ ကန့်သတ်ချက် ရှိတယ်)
 
-तरीका 1 — Docker के द्वारा डिप्लॉयमेंट (Production / Render / Cloud)
+နည်းလမ်း ၁ — Docker ဖြင့် တင်သွင်းခြင်း (Production / Render / Cloud)
 
-फ़ायदे: पर्यावरण समान रहता है, डिप्लॉयमेंट और स्केल करना आसान। स्टेजिंग / प्रोडक्शन वातावरण के लिए अनुशंसित।
+အားသာချက်များ: ပတ်ဝန်းကျင်တူညီမှုရှိ၊ deployment လုပ်ရတာလွယ်ကူ၊ scale ပေးရလ mudah. staging/production အတွက် recommend လုပ်ပါတယ်။
 
-इमेज बिल्ड करें (PowerShell):
+၁) Image ကို build လုပ်ခြင်း (PowerShell မှ):
 
-# उस फोल्डर से चलाएं जहाँ Dockerfile है (ai-detection)
+# Dockerfile ရှိတဲ့ folder (ai-detection) မှ run လုပ်ပါ
 docker build -t your-registry/ai-detection:latest .
 
 
-स्थानीय कंटेनर चलाएँ टेस्ट करने के लिए:
+၂) စမ်းသပ်ဖို့လ local container run မည်:
 
-# कंटेनर के लिए PORT सेट करें (image के भीतर uvicorn इस PORT को पढ़ता है)
+# PORT ကို set လုပ်ပါ (image ထဲမှာ uvicorn မှတ်သားထားတဲ့ PORT ကိုဖတ်မည်)
 $env:PORT = '8000'
 docker run --rm -e PORT=8000 -p 8000:8000 your-registry/ai-detection:latest
 
 
-docker-compose का उपयोग करें (यदि repo में docker-compose.yml हो):
+၃) docker-compose သုံးမည် (repo ထဲမှာ docker-compose.yml ရှိလျှင်):
 
 docker compose up --build
 
 
-इमेज को registry (Docker Hub / GHCR आदि) में push करें:
+၄) Image ကို registry (Docker Hub / GHCR စသည်) ထဲသို့ push လုပ်ခြင်း:
 
 docker tag your-registry/ai-detection:latest yourhub/ai-detection:1.0.0
 docker push yourhub/ai-detection:1.0.0
 
 
-महत्वपूर्ण नोट्स:
+အရေးကြီး မှတ်ချက်များ:
 
-कई PaaS (जैसे Render) PORT नामक environment variable देती हैं — एप्लिकेशन को उस $PORT पर bind होना चाहिए। start.sh स्क्रिप्ट repo में इस बात को पढ़ती है। सुनिश्चित करें आपका प्लेटफ़ॉर्म वह variable सेट करता है।
+PaaS များ (ဥပမာ Render ကဲ့သို့သော) က PORT ဆိုတဲ့ environment variable ပေးတတ်သည် — အက်ပလီကေးရှင်းသည် ထို $PORT အပေါ် bind ဖြစ်မှရမည်။ Repo ထဲရှိ start.sh script မှ variable ကိုဖတ်ပါတယ်။ သင့် platform မှာ variable သတ်မှတ်ထားမှ အလုပ်လုပ်မည်။
 
-Torch एक बड़ा पैकेज है; इमेज बिल्ड करते वक्त wheel डाउनलोड धीमा हो सकता है या असफल हो सकता है अगर नेटवर्क अस्थिर हो। यदि build या install torch में समस्या आए:
+Torch သည် အများကြီးသော package ဖြစ်သည်။ Image build လုပ်စဉ် wheel များ download လုပ်ခြင်းသည် network မတည်ငြိမ်လျှင် နှေးကွေးခြင်းဖြစ်နိုင် သို့မဟုတ် မအောင်မြင်နိုင်သည်။ build / install torch တွင် ပြဿနာများရှိပါက —
 
-wheel को पहले डाउनलोड करके build context में शामिल करें, या
+wheel များကို ကြိုတင် download လုပ်ပြီး build context ထဲ ထည့်ပါ၊ သို့မဟုတ်
 
-एक base image उपयोग करें जिसमें torch wheel पहले से हो, या
+torch wheel ပါသော base image ကို အသုံးပြုပါ၊ သို့မဟုတ်
 
-CI / सर्वर वातावरण में build करें जहाँ नेटवर्क स्थिर है।
+CI / server စနစ် သို့မဟုတ် network တည်ငြိမ်သော စနစ်တွင် build လုပ်ပါ။
 
-अगर NumPy ABI mismatch की समस्या हो (उदाहरण “A module compiled using NumPy 1.x cannot be run in NumPy 2.x”), सुनिश्चित करें कि constraints.txt में numpy<2 है और फिर इमेज को पुनः बिल्ड करें।
+NumPy ABI mismatch အမှားတွေ့လျှင် (ဥပမာ: “A module compiled using NumPy 1.x cannot be run in NumPy 2.x”), constraints.txt ထဲမှာ numpy<2 ဖြစ်စေပြီး image ကို ပြန် build လုပ်ပါ။
 
-तरीका 2 — स्थानीय विकास virtualenv द्वारा (development / debug)
+နည်းလမ်း ၂ — local development virtualenv ဖြင့် (development / debug)
 
-फ़ायदे: हल्का होता है, कोड बदलना आसान, IDE से debug आसान। नुकसान: यदि आप वास्तविक inference चलाना चाहते हैं, तब भारी पैकेज (torch) इंस्टॉल करना पड़ सकता है।
+အားသာချက်များ: ပိုရိုးရှင်းသည်၊ code ပြင်ဖို့လွယ်သည်၊ IDE ဖြင့် debugging လုပ်ရသောသူများအတွက် သင့်လျော်သည်။ အားနည်းချက်: inference ပြီးမြောက်စေရန် torch ကဲ့သို့ package များ install လုပ်ရရန်လိုအပ်နိုင်သည်။
 
-virtualenv बनाएं और एक्टिवेट करें (PowerShell):
+၁) virtualenv ပြုလုပ်ပြီး အက်မသုံးခြင်း (PowerShell):
 
 cd path\to\ai-detection
 python -m venv .venv
-# एक्टिवेट (PowerShell)
+# Activate (PowerShell)
 .\.venv\Scripts\Activate.ps1
-# यदि PowerShell स्क्रिप्ट execution blocked हो:
-# एडमिन अधिकारों के साथ PowerShell खोलें और चलाएँ:
+# PowerShell script တွင် execution block ဖြစ်ပါက - 
+# Admin ခွင့်ဖြင့် PowerShell ကိုဖွင့်ပြီး run လုပ်ပါ:
 # Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
 
 
-dependencies इंस्टॉल करें:
+၂) dependencies များ install လုပ်ခြင်း:
 
 pip install --upgrade pip
 pip install -r requirements.txt -c constraints.txt
 
 
-PORT सेट करें और सर्वर चलाएँ (उदाहरण के लिए PORT=8000):
+၃) PORT ကို သတ်ပြီး server ကို run လုပ်ခြင်း (ဥပမာ PORT=8000):
 
 $env:PORT = '8000'
 uvicorn app.main:app --host 0.0.0.0 --port $env:PORT --reload
 
 
-ब्राउज़र खोलें और परीक्षण करें: http://localhost:8000/
+၄) browser ဖြင့် စမ်းသပ်ရန်: http://localhost:8000/ ကိုဖွင့်ကြည့်ပါ။
 
-विकास के लिए नोट्स:
+local development မှတ်ချက်များ:
 
-यदि आप torch इंस्टॉल नहीं करना चाहते क्योंकि बहुत भारी है, आप inference को mock कर सकते हैं या केवल unit tests चला सकते हैं; या inference के लिए Docker का उपयोग करें।
+torch ကဲ့သို့ packages မူလတန်းအလေးချိန်များကို မinstall လုပ်ချင်ပါက inference ကို mock လုပ်နိုင်သည်၊ သို့မဟုတ် unit tests များသာ run လုပ်ရမည်။ သို့မဟုတ် אנו Docker ကို အသုံးပြုနိုင်သည် inference ဖြစ်စေလိုပါက။
 
-सुनिश्चित करें कि मॉडल फ़ाइल models/yolov8s.pt मौजूद हो models/ फोल्डर में यदि आप वास्तविक inference करना चाहते हैं।
+inference run မည်ဆိုပါက models/yolov8s.pt ဖိုင်သည် models/ folder ထဲမှာ ရှိနေသင့်သည်။
 
-Endpoints & हेल्थ चेक
+Endpoints & Health Check
 
-GET /health — हेल्‍थ चेक एन्डपॉइंट।
+GET /health — health check endpoint
 
-POST /predict/ — inference एन्डपॉइंट (file upload form-data). फ्रंट-एंड में भी उसके अनुरूप टेस्ट करें।
+POST /predict/ — inference endpoint (file upload form-data)။ frontend ကလည်း ဒါနှင့်လိုက်ဖက်သင့်သည်။
 
-त्वरित Troubleshooting
+ပြတ်ပြတ်သားသား Troubleshooting
 
-यदि /predict/ पर 500 एरर आ रही हो और NumPy ABI mismatch हो: कोशिश करें pip install 'numpy<2' और इमेज को पुनः build करें।
+/predict/ မှာ 500 error ဖြစ်လာက NumPy ABI mismatch ဖြစ်နိုင်သည် — စမ်းပြပါ ­pip install 'numpy<2' ပြန် install ပြီး image ကို rebuild လုပ်ပါ။
 
-अगर POST करने पर 405 एरर हो रही हो: reverse-proxy / static route कॉन्फ़िगरेशन देखें; repo में static route /static के लिए सेटअप है और सुनिश्चित करें API route overshadow नहीं हो रही है।
+POST ပြုလုပ်စဉ် 405 error ဖြစ်ပါက reverse-proxy / static route configuration ကို စစ်ဆေးပါ။ Repo ထဲမှာ static route /static သတ်မှတ်ထားပြီး API route မဖုံးမိရန်သေချာစေပါ။
 
-502/504 error अगर reverse proxy से आ रही हो: यह हो सकता है कि worker crash हुआ हो या timeout हो रहा हो; repo में uvicorn worker-count एक है और proxy timeout बढ़ाया गया है deploy/default.conf में।
+Proxy မှာ 502/504 error ကြုံရပါက worker crash ဖြစ်နေသည် သို့မဟုတ် timeout ဖြစ်နေခြင်း ဖြစ်နိုင်သည်။ Repo တွင် deploy/default.conf ထဲမှာ uvicorn worker-count ကို 1 သတ်ထားပြီး proxy timeout ကို မြှင့်ပေးထားသည်။
