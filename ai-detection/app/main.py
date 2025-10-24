@@ -139,17 +139,20 @@ from fastapi.responses import PlainTextResponse
 
 
 @app.options("/predict/")
+@app.options("/predict")
 async def predict_options():
     return PlainTextResponse("ok", status_code=200)
 
 
 @app.get("/predict/")
+@app.get("/predict")
 async def predict_get():
     # Helpful message for GET requests (not used for actual prediction)
     return {"detail": "Use POST /predict/ with multipart/form-data field 'file' to upload an image."}
 
 
 @app.post("/predict/", response_model=PredictionResponse)
+@app.post("/predict", response_model=PredictionResponse)
 async def predict(file: UploadFile = File(...)):
     # Tạo một thư mục tạm thời duy nhất cho mỗi request
     with tempfile.TemporaryDirectory() as temp_dir_str:
