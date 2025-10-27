@@ -28,30 +28,6 @@ class PredictionResponse(BaseModel):
 
 app = FastAPI()
 
-# Serve frontend static files so the same container image can serve the SPA
-# (useful for single-image deployments like Render). Mount static files under
-# `/static` so API routes (like /predict/) are not shadowed by StaticFiles which
-# only supports GET/HEAD and would return 405 for POST requests. We also add
-# explicit routes to serve `index.html` for the SPA root and fallback.
-frontend_path = Path(__file__).resolve().parent.parent / "frontend"
-if frontend_path.exists():
-    app.mount("/static", StaticFiles(directory=str(frontend_path)), name="static")
-
-    from fastapi.responses import FileResponse
-
-    @app.get("/", include_in_schema=False)
-    async def root():
-        return FileResponse(frontend_path / "index.html")
-
-    @app.get("/{full_path:path}", include_in_schema=False)
-    async def spa_fallback(full_path: str):
-        # If the requested file exists in the frontend folder, serve it. Otherwise
-        # return index.html so the SPA client-side router can handle the path.
-        requested = frontend_path / full_path
-        if requested.exists() and requested.is_file():
-            return FileResponse(requested)
-        return FileResponse(frontend_path / "index.html")
-
 # Model is loaded lazily at startup to avoid importing heavy ML deps at module import time.
 # This makes tests and lightweight tools importable without requiring torch/ultralytics.
 model = None
@@ -139,21 +115,28 @@ from fastapi.responses import PlainTextResponse
 
 
 @app.options("/predict/")
+async def predict_options_slash():
+    return PlainTextResponse("ok", status_code=200)
+
+
 @app.options("/predict")
-async def predict_options():
+async def predict_options_no_slash():
     return PlainTextResponse("ok", status_code=200)
 
 
 @app.get("/predict/")
-@app.get("/predict")
-async def predict_get():
+async def predict_get_slash():
     # Helpful message for GET requests (not used for actual prediction)
     return {"detail": "Use POST /predict/ with multipart/form-data field 'file' to upload an image."}
 
 
+@app.get("/predict")
+async def predict_get_no_slash():
+    return {"detail": "Use POST /predict/ with multipart/form-data field 'file' to upload an image."}
+
+
 @app.post("/predict/", response_model=PredictionResponse)
-@app.post("/predict", response_model=PredictionResponse)
-async def predict(file: UploadFile = File(...)):
+async def predict_slash(file: UploadFile = File(...)):
     """
     Xử lý inference với YOLO - tối ưu cho Render (tránh disk I/O, timeout).
     Ưu tiên xử lý in-memory; fallback sang disk nếu cần.
@@ -211,3 +194,30 @@ async def predict(file: UploadFile = File(...)):
         import logging
         logging.error("Inference error: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail=f"Đã xảy ra lỗi khi xử lý ảnh: {str(e)}")
+
+
+@app.post("/predict", response_model=PredictionResponse)
+async def predict_no_slash(file: UploadFile = File(...)):
+    """Redirect to main handler with trailing slash for consistency"""
+    return await predict_slash(file)
+
+
+# ============================================================================
+# SPA Frontend serving (registered AFTER all API routes)
+# ============================================================================
+frontend_path = Path(__file__).resolve().parent.parent / "frontend"
+if frontend_path.exists():
+    from fastapi.responses import FileResponse
+    
+    # Mount static files under /static for explicit asset paths
+    app.mount("/static", StaticFiles(directory=str(frontend_path)), name="static")
+
+    @app.get("/", include_in_schema=False)
+    async def root():
+        """Serve index.html at root"""
+        return FileResponse(frontend_path / "index.html")
+    
+    @app.get("/index.html", include_in_schema=False)
+    async def index_html():
+        """Explicit route for index.html"""
+        return FileResponse(frontend_path / "index.html")
