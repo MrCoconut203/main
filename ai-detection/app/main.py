@@ -154,50 +154,60 @@ async def predict_get():
 @app.post("/predict/", response_model=PredictionResponse)
 @app.post("/predict", response_model=PredictionResponse)
 async def predict(file: UploadFile = File(...)):
-    # Tạo một thư mục tạm thời duy nhất cho mỗi request
-    with tempfile.TemporaryDirectory() as temp_dir_str:
-        temp_dir = Path(temp_dir_str)
-        # Tạo tên file duy nhất để tránh xung đột
-        unique_filename = f"{uuid.uuid4()}_{file.filename}"
-        input_image_path = temp_dir / unique_filename
+    """
+    Xử lý inference với YOLO - tối ưu cho Render (tránh disk I/O, timeout).
+    Ưu tiên xử lý in-memory; fallback sang disk nếu cần.
+    """
+    if model is None:
+        raise HTTPException(status_code=503, detail="Model not loaded yet")
 
+    try:
+        import numpy as np
+        import cv2
+        import io
+
+        # Đọc toàn bộ file vào memory
+        contents = await file.read()
+        
+        # Thử decode trực tiếp bằng OpenCV (in-memory, nhanh hơn disk I/O)
+        nparr = np.frombuffer(contents, np.uint8)
+        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        
+        if img is None:
+            raise HTTPException(status_code=400, detail="Cannot decode image. Please upload a valid image file.")
+
+        # Predict trực tiếp từ numpy array (không save, nhanh hơn)
+        results = model.predict(img, save=False, verbose=False)
+        result = results[0]
+
+        # Lấy tốc độ xử lý
+        speed = getattr(result, "speed", {})
         try:
-            # Lưu file upload
-            with open(input_image_path, "wb") as f:
-                shutil.copyfileobj(file.file, f)
+            speed_text = f"{speed.get('preprocess',0):.1f}ms preprocess, {speed.get('inference',0):.1f}ms inference, {speed.get('postprocess',0):.1f}ms postprocess"
+        except Exception:
+            speed_text = ""
 
-            # Predict
-            if model is None:
-                # Model not available yet (startup failure or still loading)
-                raise HTTPException(status_code=503, detail="Model not loaded yet")
+        # Xử lý kết quả
+        summary, description = process_prediction_results(result, speed_text)
 
-            results = model.predict(str(input_image_path), save=True, project=temp_dir, name="results", exist_ok=True)
-            result = results[0]
+        # Vẽ bounding boxes trực tiếp trên ảnh (in-memory)
+        plotted_img = result.plot()  # trả về numpy array với boxes đã vẽ
+        
+        # Encode sang JPEG in-memory
+        _, buffer = cv2.imencode('.jpg', plotted_img)
+        encoded_image = base64.b64encode(buffer).decode('utf-8')
 
-            # Lấy tốc độ xử lý
-            speed = getattr(result, "speed", {})
-            try:
-                speed_text = f"{speed.get('preprocess',0):.1f}ms preprocess, {speed.get('inference',0):.1f}ms inference, {speed.get('postprocess',0):.1f}ms postprocess"
-            except Exception:
-                speed_text = ""
+        return PredictionResponse(
+            filename=file.filename or "uploaded_image.jpg",
+            description=description,
+            details=summary,
+            speed=speed,
+            image_base64=encoded_image,
+        )
 
-            # Xử lý kết quả
-            summary, description = process_prediction_results(result, speed_text)
-
-            # Lấy ảnh kết quả và mã hóa
-            result_image_path = Path(result.save_dir) / unique_filename
-            encoded_image = encode_image_to_base64(result_image_path)
-
-            return PredictionResponse(
-                filename=file.filename,
-                description=description,
-                details=summary,
-                speed=speed,
-                image_base64=encoded_image,
-            )
-        except FileNotFoundError as e:
-            raise HTTPException(status_code=404, detail=str(e))
-        except HTTPException:
-            raise
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Đã xảy ra lỗi khi xử lý ảnh: {e}")
+    except HTTPException:
+        raise
+    except Exception as e:
+        import logging
+        logging.error("Inference error: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Đã xảy ra lỗi khi xử lý ảnh: {str(e)}")

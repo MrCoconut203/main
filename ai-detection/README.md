@@ -102,9 +102,32 @@ Ghi chú cho local dev:
 
 ## Troubleshooting nhanh
 
-- Lỗi 500 tại `/predict/` do NumPy ABI mismatch: thử cài `pip install 'numpy<2'` và rebuild image.
-- Nếu gặp 405 khi gửi POST: kiểm tra reverse-proxy/static route; repo đã cấu hình static tại `/static` và API không bị shadow.
-- 502/504 từ proxy: có thể do worker crash hoặc timeout; repo đã điều chỉnh uvicorn workers → 1 và tăng proxy timeout trong `deploy/default.conf`.
+**Lỗi 405 (Method Not Allowed)**
+- Nguyên nhân: Client gọi endpoint không đúng phương thức hoặc trailing slash không khớp.
+- Giải pháp: Repo đã hỗ trợ cả `/predict/` và `/predict` (với/không dấu `/`). Đảm bảo client POST đúng endpoint.
+
+**Lỗi 500 (Internal Server Error) - NumPy ABI mismatch**
+- Nguyên nhân: Thư viện compiled (torch, ultralytics) build với NumPy 1.x nhưng runtime có NumPy 2.x.
+- Giải pháp: Rebuild image với `constraints.txt` chứa `numpy<2`, hoặc chạy `pip install 'numpy<2'` trong container.
+
+**Lỗi 502/504 (Bad Gateway / Gateway Timeout)**
+- Nguyên nhân: 
+  - Backend crash do OOM (quá nhiều workers, model quá lớn).
+  - Inference mất quá lâu (>30s Render default timeout).
+  - Proxy timeout (nếu dùng nginx).
+- Giải pháp:
+  - Giảm workers xuống 1 (đã áp dụng trong `start.sh`).
+  - Tăng uvicorn timeout: `--timeout-keep-alive 120` (đã áp dụng).
+  - Tăng nginx proxy timeout (đã set 90s connect, 180s read trong `deploy/default.conf`).
+  - Xử lý in-memory thay vì disk I/O (đã refactor trong `app/main.py`).
+
+**Lỗi 503 (Service Unavailable)**
+- Nguyên nhân: Model chưa load xong khi request đến (cold start).
+- Giải pháp: Đợi vài giây và retry. Frontend đã có timeout 90s; nếu cần, cấu hình health check trên Render để đảm bảo service ready trước khi nhận traffic.
+
+**Timeout khi upload ảnh lớn**
+- Frontend có timeout 90s (có thể điều chỉnh trong `index.html`, biến `setTimeout(..., 90000)`).
+- Backend xử lý in-memory nên nhanh hơn disk; nếu ảnh quá lớn (>10MB), cân nhắc resize client-side trước khi upload.
 
 ---
 

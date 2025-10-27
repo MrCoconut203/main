@@ -67,12 +67,18 @@
       const formData = new FormData();
       formData.append("file", file);
 
+      // Tăng timeout cho fetch (mặc định không giới hạn; thêm AbortSignal để control)
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 90000); // 90s timeout
+
       try {
         const res = await fetch("/predict/", {
           method: "POST",
           body: formData,
+          signal: controller.signal
         });
 
+        clearTimeout(timeoutId);
         loadingElement.style.display = "none";
 
         if (!res.ok) {
@@ -94,8 +100,14 @@
           document.getElementById("resultImage").src = '';
         }
       } catch (err) {
+        clearTimeout(timeoutId);
         loadingElement.style.display = "none";
-        alert('Request failed: ' + err);
+        
+        if (err.name === 'AbortError') {
+          alert('Yêu cầu quá lâu (>90s). Vui lòng thử lại với ảnh nhỏ hơn hoặc kiểm tra kết nối mạng.');
+        } else {
+          alert('Request failed: ' + err);
+        }
         console.error(err);
       }
     };
