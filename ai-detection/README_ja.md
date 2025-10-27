@@ -1,6 +1,14 @@
-# YOLOv8 物体検出 API
+# YOLOv8 物体検出 API + AI画像説明
 
-YOLOv8モデルを使用した物体検出のFastAPI WebサービスとDockerコンテナです。
+YOLOv8モデルとBLIP-2画像キャプションを使用した高度な物体検出WebサービスとDockerコンテナです。
+
+## ✨ 主な機能
+
+- 🎯 **YOLOv8物体検出**: リアルタイムで画像内の物体を検出
+- 🧠 **AI画像説明**: BLIP-2モデルによる自然言語での詳細なシーン説明
+- 📊 **詳細なメトリクス**: 処理時間、推論速度、物体数を日本語で表示
+- 🌐 **日本語対応**: すべての結果とUIが日本語
+- 🎨 **美しいUI**: アニメ風グラデーション背景、ローディングアニメーション
 
 ## 📁 プロジェクト構造
 
@@ -134,17 +142,36 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 **レスポンス例:**
 ```json
 {
-  "description": "person: 2件, car: 1件",
-  "image_base64": "iVBORw0KGgoAAAANS...",
-  "detections": [
-    {
-      "class": "person",
-      "confidence": 0.92,
-      "bbox": [120, 45, 280, 350]
-    }
-  ]
+  "filename": "sample.jpg",
+  "description": "この画像はa busy city street with cars and peopleを示しています。画像内に合計5個の物体が検出されました。具体的には、車が2個、人が3個が含まれています。",
+  "yolo_summary": "YOLO検出: car: 2個、person: 3個",
+  "object_count": 5,
+  "object_details": {
+    "car": 2,
+    "person": 3
+  },
+  "processing_time": 1.234,
+  "inference_speed": {
+    "preprocess": 2.5,
+    "inference": 45.3,
+    "postprocess": 1.8
+  },
+  "image_base64": "iVBORw0KGgoAAAANS..."
 }
 ```
+
+### レスポンスフィールドの説明
+
+- `description`: BLIP-2とYOLOを組み合わせた詳細な日本語説明
+- `yolo_summary`: YOLO検出結果の要約（日本語）
+- `object_count`: 検出された物体の総数
+- `object_details`: 各物体タイプの個数
+- `processing_time`: 総処理時間（秒）
+- `inference_speed`: 推論速度の詳細（ミリ秒）
+  - `preprocess`: 前処理時間
+  - `inference`: 推論時間
+  - `postprocess`: 後処理時間
+- `image_base64`: バウンディングボックス付き結果画像（Base64エンコード）
 
 ## 🌐 クラウドデプロイ
 
@@ -175,6 +202,9 @@ Renderが自動的にビルド＆デプロイします。
 | `MODEL_PATH` | `models/yolov8s.pt` | YOLOv8モデルのパス |
 | `CORS_ORIGINS` | `*` | 許可するオリジン |
 | `PORT` | `8000` | サーバーポート |
+| `ENABLE_CAPTIONING` | `true` | BLIP-2画像説明を有効化 (true/false) |
+
+**注意:** `ENABLE_CAPTIONING=false` に設定すると、BLIP-2をロードせずYOLO検出のみを使用します（メモリ節約）。
 
 ## 🐛 トラブルシューティング
 
@@ -232,6 +262,31 @@ pip install numpy==1.26.4
 pip install --force-reinstall --no-cache-dir ultralytics
 ```
 
+### 問題: BLIP-2メモリ不足
+**原因:** BLIPモデルが大きすぎる
+
+**解決策1:** 画像説明を無効化
+```powershell
+$env:ENABLE_CAPTIONING="false"
+uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
+
+**解決策2:** Docker Desktopのメモリを増やす
+- Settings > Resources > Memory を 4GB+ に設定
+
+**解決策3:** より小さいBLIPモデルを使用
+`main.py` 内で `Salesforce/blip-image-captioning-base` を `Salesforce/blip-image-captioning-large` に変更（より高精度だがメモリを多く使用）。
+
+### 問題: transformersパッケージが見つからない
+```
+ModuleNotFoundError: No module named 'transformers'
+```
+
+**解決策:**
+```powershell
+pip install transformers pillow sentencepiece accelerate
+```
+
 ## 📦 依存関係
 
 主要なPythonパッケージ:
@@ -242,6 +297,21 @@ pip install --force-reinstall --no-cache-dir ultralytics
 - `opencv-python` - 画像処理
 - `pillow` - 画像操作
 - `python-multipart` - ファイルアップロード
+- `transformers` - BLIP-2画像キャプション
+- `sentencepiece` - トークナイザー
+- `accelerate` - モデル最適化
+
+## 🎨 UI機能
+
+- **アニメ風グラデーション背景**: 紫〜青のグラデーション
+- **ローディングスピナー**: 回転アニメーション
+- **詳細メトリクス表示**:
+  - 🎯 検出物体数
+  - ⏱️ 総処理時間
+  - ⚡ 前処理速度
+  - 🚀 推論速度
+  - ✨ 後処理速度
+- **完全日本語対応**: すべてのテキストが日本語
 
 ## 📝 ライセンス
 

@@ -173,6 +173,48 @@
       text-align: center;
     }
 
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 15px;
+      margin: 20px 0;
+      padding: 15px;
+      background: white;
+      border-radius: 10px;
+    }
+
+    .metric-item {
+      padding: 10px;
+      border-left: 3px solid #667eea;
+      background: #f8f9ff;
+      border-radius: 5px;
+    }
+
+    .metric-label {
+      font-size: 0.9em;
+      color: #666;
+      margin-bottom: 5px;
+    }
+
+    .metric-value {
+      font-size: 1.2em;
+      font-weight: 600;
+      color: #667eea;
+    }
+
+    .yolo-summary {
+      background: #e8f8f5;
+      padding: 15px;
+      border-radius: 10px;
+      margin: 15px 0;
+      border-left: 4px solid #27ae60;
+    }
+
+    .yolo-summary-text {
+      color: #27ae60;
+      font-weight: 600;
+    }
+
     #resultImage {
       width: 100%;
       border-radius: 10px;
@@ -200,6 +242,34 @@
     
     <div id="resultContainer">
       <h3 id="resultDescription"></h3>
+      
+      <div class="yolo-summary">
+        <div class="yolo-summary-text" id="yoloSummary"></div>
+      </div>
+
+      <div class="metrics-grid">
+        <div class="metric-item">
+          <div class="metric-label">🎯 検出物体数</div>
+          <div class="metric-value" id="objectCount">0</div>
+        </div>
+        <div class="metric-item">
+          <div class="metric-label">⏱️ 処理時間</div>
+          <div class="metric-value" id="processingTime">0s</div>
+        </div>
+        <div class="metric-item">
+          <div class="metric-label">⚡ 前処理速度</div>
+          <div class="metric-value" id="preprocessSpeed">0ms</div>
+        </div>
+        <div class="metric-item">
+          <div class="metric-label">🚀 推論速度</div>
+          <div class="metric-value" id="inferenceSpeed">0ms</div>
+        </div>
+        <div class="metric-item">
+          <div class="metric-label">✨ 後処理速度</div>
+          <div class="metric-value" id="postprocessSpeed">0ms</div>
+        </div>
+      </div>
+
       <img id="resultImage" src="" alt="検出結果">
     </div>
   </div>
@@ -249,10 +319,34 @@
 
         const data = await res.json();
 
+        // Display results with detailed metrics
         resultContainer.classList.add("show");
+        
+        // Main description
         document.getElementById("resultDescription").innerText = 
           data.description || '検出結果なし';
         
+        // YOLO summary
+        document.getElementById("yoloSummary").innerText = 
+          data.yolo_summary || 'YOLO検出: 物体なし';
+        
+        // Metrics
+        document.getElementById("objectCount").innerText = 
+          data.object_count || 0;
+        document.getElementById("processingTime").innerText = 
+          (data.processing_time || 0).toFixed(2) + 's';
+        
+        // Inference speed details
+        if (data.inference_speed) {
+          document.getElementById("preprocessSpeed").innerText = 
+            (data.inference_speed.preprocess || 0).toFixed(1) + 'ms';
+          document.getElementById("inferenceSpeed").innerText = 
+            (data.inference_speed.inference || 0).toFixed(1) + 'ms';
+          document.getElementById("postprocessSpeed").innerText = 
+            (data.inference_speed.postprocess || 0).toFixed(1) + 'ms';
+        }
+        
+        // Display image with detections
         if (data.image_base64) {
           document.getElementById("resultImage").src = 
             `data:image/jpeg;base64,${data.image_base64}`;

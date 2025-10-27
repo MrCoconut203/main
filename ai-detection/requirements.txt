@@ -13,3 +13,9 @@ ultralytics>=8.0.0,<9.0
 # pip pulls the correct prebuilt wheel instead of trying to build from source.
 # Use headless OpenCV on the server to avoid GUI dependencies and reduce conflicts.
 opencv-python-headless==4.8.0.76
+
+# Image captioning for detailed scene descriptions
+transformers>=4.30.0
+pillow>=9.0.0
+sentencepiece>=0.1.99
+accelerate>=0.20.0
