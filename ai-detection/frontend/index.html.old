@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>YOLOv8 画像認識</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 20px;
+    }
+    #uploadForm {
+      margin-bottom: 20px;
+    }
+    #resultContainer {
+      margin-top: 20px;
+      text-align: center;
+      border: 1px solid #ccc;
+      padding: 20px;
+      border-radius: 8px;
+      max-width: 800px;
+    }
+    #resultImage {
+      max-width: 100%;
+      height: auto;
+      margin-top: 15px;
+      border: 1px solid #eee;
+    }
+    #loading {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <h2>Tải ảnh để nhận dạng</h2>
+  <form id="uploadForm">
+    <input type="file" id="fileInput" accept="image/*">
+    <button type="submit">Bắt đầu</button>
+  </form>
+
+  <p id="loading">Đang xử lý, vui lòng chờ...</p>
+
+  <div id="resultContainer" style="display: none;">
+    <h3 id="resultDescription"></h3>
+    <img id="resultImage" src="" alt="結果画像">
+  </div>
+
+  <script>
+    document.getElementById("uploadForm").onsubmit = async (e) => {
+      e.preventDefault();
+      const file = document.getElementById("fileInput").files[0];
+      if (!file) {
+        alert("Vui lòng chọn file ảnh!");
+        return;
+      }
+
+      const loadingElement = document.getElementById("loading");
+      const resultContainer = document.getElementById("resultContainer");
+
+  // Hiển thị trạng thái đang xử lý và ẩn kết quả cũ
+      loadingElement.style.display = "block";
+      resultContainer.style.display = "none";
+
+      const formData = new FormData();
+      formData.append("file", file);
+
+      // Tăng timeout cho fetch (mặc định không giới hạn; thêm AbortSignal để control)
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 90000); // 90s timeout
+
+      try {
+        const res = await fetch("/predict/", {
+          method: "POST",
+          body: formData,
+          signal: controller.signal
+        });
+
+        clearTimeout(timeoutId);
+        loadingElement.style.display = "none";
+
+        if (!res.ok) {
+          // try to show json error or text
+          let errText = await res.text();
+          try { errText = JSON.stringify(JSON.parse(errText), null, 2); } catch(e) {}
+          alert(`Server returned ${res.status}: ${errText}`);
+          return;
+        }
+
+        const data = await res.json();
+
+        // Hiển thị kết quả (bảo vệ các trường không tồn tại)
+        resultContainer.style.display = "block";
+        document.getElementById("resultDescription").innerText = data.description || 'No description';
+        if (data.image_base64) {
+          document.getElementById("resultImage").src = `data:image/jpeg;base64,${data.image_base64}`;
+        } else {
+          document.getElementById("resultImage").src = '';
+        }
+      } catch (err) {
+        clearTimeout(timeoutId);
+        loadingElement.style.display = "none";
+        
+        if (err.name === 'AbortError') {
+          alert('Yêu cầu quá lâu (>90s). Vui lòng thử lại với ảnh nhỏ hơn hoặc kiểm tra kết nối mạng.');
+        } else {
+          alert('Request failed: ' + err);
+        }
+        console.error(err);
+      }
+    };
+  </script>
+</body>
+</html>

@@ -1,43 +1,53 @@
 # Python
 __pycache__/
+*.py[cod]
+*$py.class
+*.so
 *.pyc
-venv/
-env/
-
-# Model files (do not track large binaries in repo)
-
-
-# OS / Editor
-.DS_Store
-.vscode/
-
-# Docker
-certs/
-deploy/
-# Môi trường ảo
 venv/
 .venv/
 env/
 .env
+.env.local
 
-# File cache của Python
-__pycache__/
-*.py[cod]
-*$py.class
+# Model files (large binaries - use Git LFS if needed)
+models/*.pt
+models/*.pth
+models/*.onnx
 
-# Thư mục tạm của Ultralytics
+# Ultralytics temp/runs
 runs/
 temp/
 
-# File cấu hình của IDE/Editor
+# IDE / Editor
 .vscode/
 .idea/
+*.swp
+*.swo
+*~
 
-# File hệ thống của HĐH
+# OS
 .DS_Store
 Thumbs.db
+
+# Docker / Deploy
+certs/
 
 # Distribution / packaging
 build/
 dist/
 *.egg-info/
+
+# Logs
+*.log
+web-last.log
+build-plain.log
+
+# Backup
+*.bak
+*.md.bak
+
+# Test coverage
+.coverage
+htmlcov/
+
