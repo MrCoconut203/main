@@ -5,10 +5,11 @@ YOLOv8モデルとBLIP-2画像キャプションを使用した高度な物体�
 ## ✨ 主な機能
 
 - 🎯 **YOLOv8物体検出**: リアルタイムで画像内の物体を検出
-- 🧠 **AI画像説明**: BLIP-2モデルによる自然言語での詳細なシーン説明
+- 🧠 **AI画像説明（日本語）**: BLIP-2モデルによる詳細なシーン説明を自動的に日本語に翻訳
 - 📊 **詳細なメトリクス**: 処理時間、推論速度、物体数を日本語で表示
-- 🌐 **日本語対応**: すべての結果とUIが日本語
+- 🌐 **完全日本語対応**: すべての結果とUIが日本語（BLIP-2の説明も日本語翻訳）
 - 🎨 **美しいUI**: アニメ風グラデーション背景、ローディングアニメーション
+- 🔄 **デフォルトで有効**: BLIP-2画像説明はデフォルトで有効（無効化可能）
 
 ## 📁 プロジェクト構造
 
@@ -143,7 +144,7 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```json
 {
   "filename": "sample.jpg",
-  "description": "この画像はa busy city street with cars and peopleを示しています。画像内に合計5個の物体が検出されました。具体的には、車が2個、人が3個が含まれています。",
+  "description": "この画像は「賑やかな通りと人々と車」という場面を示しています。画像内に合計5個の物体が検出されました。具体的には、車が2個、人が3個が含まれています。",
   "yolo_summary": "YOLO検出: car: 2個、person: 3個",
   "object_count": 5,
   "object_details": {
@@ -162,7 +163,9 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
 ### レスポンスフィールドの説明
 
-- `description`: BLIP-2とYOLOを組み合わせた詳細な日本語説明
+- `description`: BLIP-2（日本語翻訳）とYOLOを組み合わせた詳細な日本語説明
+  - BLIP-2のキャプションは自動的に日本語に翻訳されます
+  - 例: "busy street with people" → "賑やかな通りと人々"
 - `yolo_summary`: YOLO検出結果の要約（日本語）
 - `object_count`: 検出された物体の総数
 - `object_details`: 各物体タイプの個数
@@ -202,9 +205,11 @@ Renderが自動的にビルド＆デプロイします。
 | `MODEL_PATH` | `models/yolov8s.pt` | YOLOv8モデルのパス |
 | `CORS_ORIGINS` | `*` | 許可するオリジン |
 | `PORT` | `8000` | サーバーポート |
-| `ENABLE_CAPTIONING` | `true` | BLIP-2画像説明を有効化 (true/false) |
+| `ENABLE_CAPTIONING` | `true` | BLIP-2画像説明を有効化（デフォルト有効） |
 
-**注意:** `ENABLE_CAPTIONING=false` に設定すると、BLIP-2をロードせずYOLO検出のみを使用します（メモリ節約）。
+**注意**: 
+- BLIP-2はデフォルトで有効です（日本語翻訳付き）
+- `ENABLE_CAPTIONING=false` に設定すると、BLIP-2をロードせずYOLO検出のみを使用します（メモリ節約、約2GB削減）
 
 ## 🐛 トラブルシューティング
 

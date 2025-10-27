@@ -16,6 +16,7 @@ import time
 # --- Cấu hình ---
 MODEL_PATH = os.getenv("MODEL_PATH", "models/yolov8s.pt")
 ALLOWED_ORIGINS = os.getenv("CORS_ORIGINS", "*")
+# Enable BLIP-2 image captioning by default (set to "false" to disable and save memory)
 ENABLE_CAPTIONING = os.getenv("ENABLE_CAPTIONING", "true").lower() == "true"
 
 
@@ -95,10 +96,64 @@ async def log_requests(request, call_next):
     return response
 
 
+def translate_caption_to_japanese(english_caption: str) -> str:
+    """
+    Dịch caption tiếng Anh sang tiếng Nhật bằng từ điển và pattern matching.
+    """
+    # Common English -> Japanese translations
+    translations = {
+        # Scenes
+        "a photo of": "", "an image of": "", "a picture of": "",
+        "street": "通り", "road": "道路", "city": "都市", "town": "町",
+        "beach": "ビーチ", "ocean": "海", "mountain": "山", "forest": "森",
+        "park": "公園", "building": "建物", "house": "家",
+        "room": "部屋", "office": "オフィス", "kitchen": "キッチン",
+        
+        # Actions
+        "walking": "歩いている", "running": "走っている", "sitting": "座っている",
+        "standing": "立っている", "playing": "遊んでいる", "eating": "食べている",
+        "driving": "運転している", "riding": "乗っている",
+        
+        # Descriptions
+        "busy": "賑やかな", "crowded": "混雑した", "empty": "空の",
+        "sunny": "晴れた", "cloudy": "曇りの", "rainy": "雨の",
+        "beautiful": "美しい", "old": "古い", "new": "新しい",
+        "large": "大きな", "small": "小さな",
+        
+        # Conjunctions
+        " with ": "と", " and ": "と", " on ": "の上に",
+        " in ": "の中に", " at ": "で", " near ": "の近くに",
+        
+        # Objects (common ones)
+        "people": "人々", "person": "人", "man": "男性", "woman": "女性",
+        "child": "子供", "children": "子供たち",
+        "car": "車", "cars": "車", "bus": "バス", "truck": "トラック",
+        "bicycle": "自転車", "motorcycle": "バイク",
+        "dog": "犬", "cat": "猫", "bird": "鳥",
+        "tree": "木", "trees": "木々", "grass": "草",
+        "sky": "空", "cloud": "雲", "clouds": "雲",
+        "water": "水", "river": "川", "lake": "湖",
+    }
+    
+    # Clean and translate
+    result = english_caption.lower().strip()
+    
+    # Replace patterns
+    for en, ja in translations.items():
+        result = result.replace(en, ja)
+    
+    # Capitalize first letter if it's a sentence
+    if result and not any(char in result for char in "あいうえおかきくけこ"):
+        # If no Japanese characters yet, keep original
+        return english_caption.strip()
+    
+    return result.strip()
+
+
 def generate_scene_description(img_array, detected_objects: Dict[str, int]) -> str:
     """
     Tạo mô tả chi tiết khung cảnh ảnh bằng tiếng Nhật.
-    Kết hợp BLIP caption (nếu có) và YOLO detection.
+    Kết hợp BLIP caption (dịch sang tiếng Nhật) và YOLO detection.
     """
     import logging
     
@@ -106,19 +161,38 @@ def generate_scene_description(img_array, detected_objects: Dict[str, int]) -> s
     object_translations = {
         "person": "人", "people": "人々", "car": "車", "truck": "トラック",
         "bus": "バス", "motorcycle": "バイク", "bicycle": "自転車",
-        "dog": "犬", "cat": "猫", "bird": "鳥", "horse": "馬",
-        "chair": "椅子", "table": "テーブル", "couch": "ソファ",
-        "tv": "テレビ", "laptop": "ノートパソコン", "phone": "電話",
-        "book": "本", "clock": "時計", "bottle": "ボトル",
-        "cup": "カップ", "fork": "フォーク", "knife": "ナイフ",
-        "spoon": "スプーン", "bowl": "ボウル", "banana": "バナナ",
-        "apple": "リンゴ", "orange": "オレンジ", "broccoli": "ブロッコリー",
-        "tree": "木", "building": "建物", "sky": "空", "road": "道路",
-        "sign": "標識", "light": "信号", "umbrella": "傘", "bag": "バッグ"
+        "dog": "犬", "cat": "猫", "bird": "鳥", "horse": "馬", "sheep": "羊",
+        "cow": "牛", "elephant": "象", "bear": "熊", "zebra": "シマウマ",
+        "giraffe": "キリン",
+        "backpack": "バックパック", "umbrella": "傘", "handbag": "ハンドバッグ",
+        "tie": "ネクタイ", "suitcase": "スーツケース",
+        "frisbee": "フリスビー", "skis": "スキー", "snowboard": "スノーボード",
+        "sports ball": "ボール", "kite": "凧", "baseball bat": "野球バット",
+        "skateboard": "スケートボード", "surfboard": "サーフボード",
+        "tennis racket": "テニスラケット",
+        "bottle": "ボトル", "wine glass": "ワイングラス", "cup": "カップ",
+        "fork": "フォーク", "knife": "ナイフ", "spoon": "スプーン",
+        "bowl": "ボウル",
+        "banana": "バナナ", "apple": "リンゴ", "sandwich": "サンドイッチ",
+        "orange": "オレンジ", "broccoli": "ブロッコリー", "carrot": "ニンジン",
+        "hot dog": "ホットドッグ", "pizza": "ピザ", "donut": "ドーナツ",
+        "cake": "ケーキ",
+        "chair": "椅子", "couch": "ソファ", "potted plant": "鉢植え",
+        "bed": "ベッド", "dining table": "ダイニングテーブル", "toilet": "トイレ",
+        "tv": "テレビ", "laptop": "ノートパソコン", "mouse": "マウス",
+        "remote": "リモコン", "keyboard": "キーボード", "cell phone": "携帯電話",
+        "microwave": "電子レンジ", "oven": "オーブン", "toaster": "トースター",
+        "sink": "シンク", "refrigerator": "冷蔵庫",
+        "book": "本", "clock": "時計", "vase": "花瓶", "scissors": "はさみ",
+        "teddy bear": "テディベア", "hair drier": "ドライヤー",
+        "toothbrush": "歯ブラシ",
+        "traffic light": "信号", "fire hydrant": "消火栓", "stop sign": "停止標識",
+        "parking meter": "駐車メーター", "bench": "ベンチ",
     }
     
     # Get BLIP caption if available
     caption_text = ""
+    caption_ja = ""
     if captioner is not None and caption_processor is not None:
         try:
             from PIL import Image
@@ -130,19 +204,26 @@ def generate_scene_description(img_array, detected_objects: Dict[str, int]) -> s
             inputs = caption_processor(pil_img, return_tensors="pt")
             out = captioner.generate(**inputs, max_length=50)
             caption_text = caption_processor.decode(out[0], skip_special_tokens=True)
-            logging.info(f"BLIP caption: {caption_text}")
+            
+            # Translate to Japanese
+            caption_ja = translate_caption_to_japanese(caption_text)
+            
+            logging.info(f"BLIP caption (EN): {caption_text}")
+            logging.info(f"BLIP caption (JA): {caption_ja}")
         except Exception as e:
             logging.warning(f"Failed to generate caption: {e}")
             caption_text = ""
+            caption_ja = ""
     
     # Build detailed Japanese description
     description_parts = []
     
     # Add scene caption if available
-    if caption_text:
-        # Translate common English caption phrases to Japanese
-        caption_ja = caption_text.replace("a photo of", "").replace("an image of", "").strip()
-        description_parts.append(f"この画像は{caption_ja}を示しています。")
+    if caption_ja:
+        description_parts.append(f"この画像は「{caption_ja}」という場面を示しています。")
+    elif caption_text:
+        # Fallback to English if translation failed
+        description_parts.append(f"この画像は「{caption_text}」という場面を示しています。")
     
     # Add detected objects in Japanese
     if detected_objects:
@@ -157,7 +238,8 @@ def generate_scene_description(img_array, detected_objects: Dict[str, int]) -> s
             else:
                 object_list.append(f"{ja_name}が{count}個")
         
-        description_parts.append("具体的には、" + "、".join(object_list) + "が含まれています。")
+        if object_list:
+            description_parts.append("具体的には、" + "、".join(object_list) + "が含まれています。")
     else:
         description_parts.append("画像内に認識可能な物体は検出されませんでした。")
     
