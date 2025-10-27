@@ -433,8 +433,6 @@ async def predict_slash(file: UploadFile = File(...)):
         except Exception as e:
             logger.error("Inference error: %s", e, exc_info=True)
             raise HTTPException(status_code=500, detail=f"画像処理中にエラーが発生しました: {str(e)}")
-
-
 @app.post("/predict", response_model=PredictionResponse)
 async def predict_no_slash(file: UploadFile = File(...)):
     """Redirect to main handler with trailing slash for consistency"""
