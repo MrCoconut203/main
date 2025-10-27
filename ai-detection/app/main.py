@@ -11,13 +11,35 @@ import tempfile
 import uuid
 import os
 import time
+import logging
+import sys
+
+
+# --- Cấu hình ---
+import logging
+import sys
+import asyncio
+from asyncio import Semaphore
+
+
+# --- Cấu hình Logging ---
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+logger = logging.getLogger(__name__)
 
 
 # --- Cấu hình ---
 MODEL_PATH = os.getenv("MODEL_PATH", "models/yolov8s.pt")
 ALLOWED_ORIGINS = os.getenv("CORS_ORIGINS", "*")
-# Enable BLIP-2 image captioning by default (set to "false" to disable and save memory)
-ENABLE_CAPTIONING = os.getenv("ENABLE_CAPTIONING", "true").lower() == "true"
+# Disable BLIP-2 by default for AWS to save cost (set to "true" to enable)
+ENABLE_CAPTIONING = os.getenv("ENABLE_CAPTIONING", "false").lower() == "true"
+# Maximum concurrent requests to prevent OOM
+MAX_CONCURRENT_REQUESTS = int(os.getenv("MAX_CONCURRENT_REQUESTS", "3"))
 
 
 # --- Định nghĩa response ---
@@ -38,36 +60,44 @@ app = FastAPI()
 model = None
 captioner = None
 caption_processor = None
+# Semaphore for rate limiting
+request_semaphore = Semaphore(MAX_CONCURRENT_REQUESTS)
 
 
 @app.on_event("startup")
-def load_model_on_startup():
+async def load_model_on_startup():
     global model, captioner, caption_processor
     import logging
+    
+    logging.basicConfig(level=logging.INFO)
+    logger = logging.getLogger(__name__)
     
     # Load YOLO
     try:
         from ultralytics import YOLO
+        logger.info("Loading YOLO model from %s...", MODEL_PATH)
         model = YOLO(MODEL_PATH)
-        logging.info("✓ YOLO model loaded successfully")
+        logger.info("✓ YOLO model loaded successfully")
     except Exception as e:
-        logging.warning("Failed to load YOLO model on startup: %s", e)
+        logger.error("Failed to load YOLO model: %s", e, exc_info=True)
+        # Don't raise - let server start even if YOLO fails
     
     # Load BLIP-2 for image captioning (optional, can be disabled via env var)
     if ENABLE_CAPTIONING:
         try:
             from transformers import BlipProcessor, BlipForConditionalGeneration
-            logging.info("Loading BLIP captioning model...")
+            logger.info("Loading BLIP captioning model (this may take 1-2 minutes on first run)...")
             caption_processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
             captioner = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base")
-            logging.info("✓ BLIP captioning model loaded successfully")
+            logger.info("✓ BLIP captioning model loaded successfully")
         except Exception as e:
-            logging.warning("Failed to load BLIP captioning model: %s. Captioning will be disabled.", e)
+            logger.warning("Failed to load BLIP captioning model: %s. Captioning will be disabled.", e, exc_info=True)
             captioner = None
+            caption_processor = None
     else:
-        logging.info("Image captioning disabled via ENABLE_CAPTIONING=false")
+        logger.info("Image captioning disabled via ENABLE_CAPTIONING=false")
     
-    logging.info("Startup: effective PORT=%s", os.getenv("PORT", "(not set)"))
+    logger.info("Startup complete. PORT=%s", os.getenv("PORT", "8000"))
 
 # CORS
 if ALLOWED_ORIGINS == "*":
@@ -82,6 +112,18 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# Health check endpoint for AWS ECS/Fargate
+@app.get("/health")
+async def health_check():
+    """AWS health check endpoint - returns 200 if service is healthy"""
+    return {
+        "status": "healthy",
+        "model_loaded": model is not None,
+        "captioning_enabled": ENABLE_CAPTIONING,
+        "captioning_available": captioner is not None
+    }
 
 
 # Simple request logging middleware to help debug Method/Path/Origin on Render
@@ -312,83 +354,85 @@ async def predict_slash(file: UploadFile = File(...)):
     """
     Xử lý inference với YOLO + Image Captioning - tối ưu cho Render.
     Trả về mô tả chi tiết bằng tiếng Nhật với metrics đầy đủ.
+    Rate-limited to prevent OOM with concurrent requests.
     """
-    if model is None:
-        raise HTTPException(status_code=503, detail="Model not loaded yet")
+    # Acquire semaphore to limit concurrent requests
+    async with request_semaphore:
+        if model is None:
+            raise HTTPException(status_code=503, detail="Model not loaded yet")
 
-    start_time = time.time()
-    
-    try:
-        import numpy as np
-        import cv2
-
-        # Đọc toàn bộ file vào memory
-        contents = await file.read()
+        start_time = time.time()
         
-        # Decode image
-        nparr = np.frombuffer(contents, np.uint8)
-        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-        
-        if img is None:
-            raise HTTPException(status_code=400, detail="Cannot decode image. Please upload a valid image file.")
-
-        # YOLO Prediction
-        results = model.predict(img, save=False, verbose=False)
-        result = results[0]
-
-        # Extract detected objects
-        detected_objects = {}
         try:
-            detected_names = [result.names[int(c)] for c in result.boxes.cls]
-            for name in detected_names:
-                detected_objects[name] = detected_objects.get(name, 0) + 1
-        except Exception:
+            import numpy as np
+            import cv2
+
+            # Đọc toàn bộ file vào memory
+            contents = await file.read()
+            
+            # Decode image
+            nparr = np.frombuffer(contents, np.uint8)
+            img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+            
+            if img is None:
+                raise HTTPException(status_code=400, detail="Cannot decode image. Please upload a valid image file.")
+
+            # YOLO Prediction
+            results = model.predict(img, save=False, verbose=False)
+            result = results[0]
+
+            # Extract detected objects
             detected_objects = {}
+            try:
+                detected_names = [result.names[int(c)] for c in result.boxes.cls]
+                for name in detected_names:
+                    detected_objects[name] = detected_objects.get(name, 0) + 1
+            except Exception:
+                detected_objects = {}
 
-        # Get inference speed metrics
-        speed = getattr(result, "speed", {})
-        inference_speed = {
-            "preprocess": speed.get('preprocess', 0.0),
-            "inference": speed.get('inference', 0.0),
-            "postprocess": speed.get('postprocess', 0.0)
-        }
+            # Get inference speed metrics
+            speed = getattr(result, "speed", {})
+            inference_speed = {
+                "preprocess": speed.get('preprocess', 0.0),
+                "inference": speed.get('inference', 0.0),
+                "postprocess": speed.get('postprocess', 0.0)
+            }
 
-        # Generate detailed Japanese description
-        detailed_description = generate_scene_description(img, detected_objects)
-        
-        # Create YOLO summary in Japanese
-        total_objects = sum(detected_objects.values())
-        if detected_objects:
-            object_summary = "、".join([f"{k}: {v}個" for k, v in detected_objects.items()])
-            yolo_summary = f"YOLO検出: {object_summary}"
-        else:
-            yolo_summary = "YOLO検出: 物体なし"
+            # Generate detailed Japanese description
+            detailed_description = generate_scene_description(img, detected_objects)
+            
+            # Create YOLO summary in Japanese
+            total_objects = sum(detected_objects.values())
+            if detected_objects:
+                object_summary = "、".join([f"{k}: {v}個" for k, v in detected_objects.items()])
+                yolo_summary = f"YOLO検出: {object_summary}"
+            else:
+                yolo_summary = "YOLO検出: 物体なし"
 
-        # Draw bounding boxes
-        plotted_img = result.plot()
-        _, buffer = cv2.imencode('.jpg', plotted_img)
-        encoded_image = base64.b64encode(buffer).decode('utf-8')
+            # Draw bounding boxes
+            plotted_img = result.plot()
+            _, buffer = cv2.imencode('.jpg', plotted_img)
+            encoded_image = base64.b64encode(buffer).decode('utf-8')
 
-        # Calculate total processing time
-        processing_time = time.time() - start_time
+            # Calculate total processing time
+            processing_time = time.time() - start_time
 
-        return PredictionResponse(
-            filename=file.filename or "uploaded_image.jpg",
-            description=detailed_description,
-            yolo_summary=yolo_summary,
-            object_count=total_objects,
-            object_details=detected_objects,
-            processing_time=round(processing_time, 3),
-            inference_speed=inference_speed,
-            image_base64=encoded_image,
-        )
+            return PredictionResponse(
+                filename=file.filename or "uploaded_image.jpg",
+                description=detailed_description,
+                yolo_summary=yolo_summary,
+                object_count=total_objects,
+                object_details=detected_objects,
+                processing_time=round(processing_time, 3),
+                inference_speed=inference_speed,
+                image_base64=encoded_image,
+            )
 
-    except HTTPException:
-        raise
-    except Exception as e:
-        import logging
-        logging.error("Inference error: %s", e, exc_info=True)
-        raise HTTPException(status_code=500, detail=f"画像処理中にエラーが発生しました: {str(e)}")
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error("Inference error: %s", e, exc_info=True)
+            raise HTTPException(status_code=500, detail=f"画像処理中にエラーが発生しました: {str(e)}")
 
 
 @app.post("/predict", response_model=PredictionResponse)

@@ -2,10 +2,13 @@
 
 ## ✨ Những gì đã được cải tiến
 
-### 1. 🧠 Thêm BLIP-2 AI Image Captioning
+### 1. 🧠 Thêm BLIP-2 AI Image Captioning (Tiếng Nhật)
 - **Mô tả ảnh chi tiết**: AI nhìn vào ảnh và mô tả như con người
-- **Hiểu ngữ cảnh**: "Ảnh này cho thấy một con đường đông đúc với xe hơi và người đi bộ"
+- **Tự động dịch sang tiếng Nhật**: BLIP-2 output tiếng Anh → tự động dịch tiếng Nhật
+- **Ví dụ**: "busy street with people" → "賑やかな通りと人々"
+- **Hiểu ngữ cảnh**: "Ảnh này cho thấy 賑やかな通りと車と人々"
 - **Kết hợp YOLO**: "Cụ thể có 4 người, 3 xe hơi, 1 biển báo"
+- **Mặc định BẬT**: BLIP-2 enabled by default (có thể tắt để tiết kiệm RAM)
 
 ### 2. 📊 Metrics đầy đủ bằng tiếng Nhật
 - 🎯 **Số lượng vật thể**: Hiển thị tổng số và chi tiết từng loại
@@ -52,17 +55,18 @@ pip install transformers pillow sentencepiece accelerate
 
 **Lưu ý**: Lần đầu chạy sẽ tải BLIP-2 model (~1GB), mất vài phút.
 
-### Bước 2: Chạy server
+### Bước 2: Chạy server (BLIP-2 mặc định BẬT)
 
-**Option A: Với BLIP-2 (đầy đủ tính năng, cần ~4GB RAM)**
+**Option A: Full features với BLIP-2 (default, cần ~4GB RAM)**
 ```powershell
-uvicorn app.main:app --reload
+cd d:\project\ai-detection
+python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
 **Option B: Không BLIP-2 (nhẹ hơn, chỉ YOLO)**
 ```powershell
 $env:ENABLE_CAPTIONING="false"
-uvicorn app.main:app --reload
+python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
 ### Bước 3: Test trong browser

@@ -19,3 +19,6 @@ transformers>=4.30.0
 pillow>=9.0.0
 sentencepiece>=0.1.99
 accelerate>=0.20.0
+
+# AWS SDK for S3 model download (optional, only if using S3_MODEL_URI)
+boto3>=1.28.0

@@ -1,0 +1,73 @@
+# ============================================================================
+# Multi-stage Dockerfile optimized for AWS ECS/Fargate
+# Reduces image size by ~40% and supports S3 model download
+# ============================================================================
+
+# --- Stage 1: Builder ---
+FROM python:3.11-slim-bookworm AS builder
+
+WORKDIR /build
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir --user -r requirements.txt
+
+# Install CPU-only PyTorch (smaller size)
+RUN pip install --no-cache-dir --user \
+    torch==2.2.0+cpu \
+    torchvision==0.17.0+cpu \
+    --index-url https://download.pytorch.org/whl/cpu
+
+
+# --- Stage 2: Runtime ---
+FROM python:3.11-slim-bookworm
+
+WORKDIR /app
+
+# Install runtime dependencies only
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgl1 \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender-dev \
+    libgomp1 \
+    ffmpeg \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy Python packages from builder
+COPY --from=builder /root/.local /root/.local
+ENV PATH=/root/.local/bin:$PATH
+
+# Copy application files
+COPY app/ /app/app/
+COPY frontend/ /app/frontend/
+COPY start.sh /start.sh
+RUN chmod +x /start.sh
+
+# Create models directory (models will be downloaded from S3 on startup)
+RUN mkdir -p /app/models
+
+# Environment variables
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    MODEL_PATH=/app/models/yolov8s.pt \
+    ENABLE_CAPTIONING=false \
+    MAX_CONCURRENT_REQUESTS=3 \
+    PORT=8000
+
+# Health check for AWS ECS
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost:${PORT}/health || exit 1
+
+# Expose port
+EXPOSE $PORT
+
+# Start application
+CMD ["/start.sh"]

@@ -295,7 +295,8 @@
       formData.append("file", file);
 
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 90000);
+      // Increased timeout to 180s for BLIP-2 processing (was 90s)
+      const timeoutId = setTimeout(() => controller.abort(), 180000);
 
       try {
         const res = await fetch("/predict/", {
