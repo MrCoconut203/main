@@ -37,7 +37,7 @@ logger = logging.getLogger(__name__)
 MODEL_PATH = os.getenv("MODEL_PATH", "models/yolov8s.pt")
 ALLOWED_ORIGINS = os.getenv("CORS_ORIGINS", "*")
 # Disable BLIP-2 by default for AWS to save cost (set to "true" to enable)
-ENABLE_CAPTIONING = os.getenv("ENABLE_CAPTIONING", "true").lower() == "true"
+ENABLE_CAPTIONING = os.getenv("ENABLE_CAPTIONING", "false").lower() == "true"
 # Maximum concurrent requests to prevent OOM
 MAX_CONCURRENT_REQUESTS = int(os.getenv("MAX_CONCURRENT_REQUESTS", "3"))
 
