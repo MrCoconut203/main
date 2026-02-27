@@ -1,21 +1,19 @@
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel
-from ultralytics import YOLO
 from pathlib import Path
 from typing import Dict, Any, Tuple
 import base64
+import io
 import os
 import time
 import logging
 import sys
-import re
+import imghdr
 
 
-# --- Cấu hình ---
-import logging
-import sys
 from asyncio import Semaphore
 
 
@@ -37,6 +35,9 @@ ALLOWED_ORIGINS = os.getenv("CORS_ORIGINS", "*")
 ENABLE_CAPTIONING = os.getenv("ENABLE_CAPTIONING", "false").lower() == "true"
 # Maximum concurrent requests to prevent OOM
 MAX_CONCURRENT_REQUESTS = int(os.getenv("MAX_CONCURRENT_REQUESTS", "3"))
+MAX_UPLOAD_BYTES = int(os.getenv("MAX_UPLOAD_BYTES", str(10 * 1024 * 1024)))
+MAX_IMAGE_SIDE = int(os.getenv("MAX_IMAGE_SIDE", "1920"))
+SUPPORTED_IMAGE_TYPES = {"jpeg", "png", "webp", "bmp", "tiff"}
 
 
 # --- Định nghĩa response ---
@@ -308,16 +309,55 @@ def process_prediction_results(result: Any, speed_text: str) -> Tuple[Dict[str, 
     return summary, description
 
 
-def encode_image_to_base64(image_path: Path) -> str:
-    """Đọc file ảnh và mã hóa sang chuỗi base64."""
-    if not image_path.exists():
-        raise FileNotFoundError("Không tìm thấy ảnh kết quả.")
-    with open(image_path, "rb") as img_file:
-        return base64.b64encode(img_file.read()).decode("utf-8")
+def validate_and_decode_image(contents: bytes, filename: str = "uploaded"):
+    """Validate upload and decode to OpenCV image with support for multiple formats."""
+    import numpy as np
+    import cv2
+    from PIL import Image, ImageOps
+
+    if not contents:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty.")
+    if len(contents) > MAX_UPLOAD_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"File too large. Maximum allowed size is {MAX_UPLOAD_BYTES // (1024 * 1024)}MB.",
+        )
+
+    detected_type = imghdr.what(None, h=contents)
+    if detected_type not in SUPPORTED_IMAGE_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported image format for '{filename}'. Supported: {', '.join(sorted(SUPPORTED_IMAGE_TYPES))}",
+        )
+
+    np_buffer = np.frombuffer(contents, np.uint8)
+    decoded = cv2.imdecode(np_buffer, cv2.IMREAD_COLOR)
+    if decoded is not None:
+        return decoded
+
+    # Pillow fallback handles edge cases and EXIF orientation
+    try:
+        pil_image = Image.open(io.BytesIO(contents))
+        pil_image = ImageOps.exif_transpose(pil_image).convert("RGB")
+        rgb_np = np.array(pil_image)
+        return cv2.cvtColor(rgb_np, cv2.COLOR_RGB2BGR)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Cannot decode image. Please upload a valid image file.")
 
 
-# OPTIONS handler to satisfy CORS preflight or probes that may hit /predict/
-from fastapi.responses import PlainTextResponse
+def optimize_image_for_inference(img):
+    """Resize large images to reduce latency and memory use while preserving aspect ratio."""
+    import cv2
+
+    height, width = img.shape[:2]
+    max_side = max(height, width)
+    if max_side <= MAX_IMAGE_SIDE:
+        return img
+
+    scale = MAX_IMAGE_SIDE / max_side
+    resized = cv2.resize(img, (int(width * scale), int(height * scale)), interpolation=cv2.INTER_AREA)
+    logger.info("Resized image from %sx%s to %sx%s for faster inference", width, height, resized.shape[1], resized.shape[0])
+    return resized
 
 
 @app.options("/predict/")
@@ -356,18 +396,12 @@ async def predict_slash(file: UploadFile = File(...)):
         start_time = time.time()
         
         try:
-            import numpy as np
             import cv2
 
             # Đọc toàn bộ file vào memory
             contents = await file.read()
-            
-            # Decode image
-            nparr = np.frombuffer(contents, np.uint8)
-            img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-            
-            if img is None:
-                raise HTTPException(status_code=400, detail="Cannot decode image. Please upload a valid image file.")
+            img = validate_and_decode_image(contents, file.filename or "uploaded")
+            img = optimize_image_for_inference(img)
 
             # YOLO Prediction
             results = model.predict(img, save=False, verbose=False)
