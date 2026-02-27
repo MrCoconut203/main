@@ -115,12 +115,13 @@ app.add_middleware(
 # Health check endpoint for AWS ECS/Fargate
 @app.get("/health")
 async def health_check():
-    """AWS health check endpoint - returns 200 if service is healthy"""
+    """AWS health check endpoint with model/captioning readiness details."""
     return {
         "status": "healthy",
         "model_loaded": model is not None,
         "captioning_enabled": ENABLE_CAPTIONING,
-        "captioning_available": captioner is not None
+        "captioning_available": captioner is not None,
+        "max_concurrent_requests": MAX_CONCURRENT_REQUESTS,
     }
 
 
@@ -182,9 +183,8 @@ def translate_caption_to_japanese(english_caption: str) -> str:
     for en, ja in translations.items():
         result = result.replace(en, ja)
     
-    # Capitalize first letter if it's a sentence
-    if result and not any(char in result for char in "あいうえおかきくけこ"):
-        # If no Japanese characters yet, keep original
+    # If translation output has no Japanese scripts, fallback to original English
+    if result and not re.search(r"[぀-ヿ㐀-䶿一-鿿]", result):
         return english_caption.strip()
     
     return result.strip()

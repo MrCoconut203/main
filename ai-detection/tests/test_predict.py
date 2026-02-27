@@ -35,3 +35,21 @@ def test_predict_smoke():
         assert "image_base64" in data
         assert "filename" in data
         assert data["filename"] == "test.jpg"
+
+
+def test_health_exposes_readiness_fields():
+    resp = client.get("/health")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "healthy"
+    assert "model_loaded" in data
+    assert "captioning_enabled" in data
+    assert "captioning_available" in data
+    assert "max_concurrent_requests" in data
+
+
+def test_translate_caption_to_japanese_supports_katakana_only_result():
+    from app.main import translate_caption_to_japanese
+
+    translated = translate_caption_to_japanese("a photo of beach")
+    assert translated == "ビーチ"
