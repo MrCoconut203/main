@@ -14,7 +14,7 @@ import json
 from pathlib import Path
 
 
-def test_detection_api(image_path: str, api_url: str = "http://localhost:8000/predict/"):
+def run_detection_api(image_path: str, api_url: str = "http://localhost:8000/predict/"):
     """
     画像を送信してAI検出結果を取得
     
@@ -109,7 +109,7 @@ def main():
     if len(sys.argv) >= 3:
         api_url = sys.argv[2]
     
-    test_detection_api(image_path, api_url)
+    run_detection_api(image_path, api_url)
 
 
 if __name__ == "__main__":

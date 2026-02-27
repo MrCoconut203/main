@@ -1,8 +1,7 @@
 import io
-from fastapi.testclient import TestClient
+import asyncio
+import httpx
 from app.main import app
-
-client = TestClient(app)
 
 
 def create_test_image():
@@ -23,7 +22,12 @@ def create_test_image():
 def test_predict_smoke():
     image_buf = create_test_image()
     files = {"file": ("test.jpg", image_buf, "image/jpeg")}
-    resp = client.post("/predict/", files=files)
+    async def _send_request():
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+            return await client.post("/predict/", files=files)
+
+    resp = asyncio.run(_send_request())
     # Accept 200 (success), 503 (model not loaded), or 500 (server error) as valid smoke-test outcomes.
     assert resp.status_code in (200, 500, 503)
     if resp.status_code == 200:
