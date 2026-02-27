@@ -4,21 +4,18 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from ultralytics import YOLO
 from pathlib import Path
-from typing import Dict, Any, Tuple, Optional
-import shutil
+from typing import Dict, Any, Tuple
 import base64
-import tempfile
-import uuid
 import os
 import time
 import logging
 import sys
+import re
 
 
 # --- Cấu hình ---
 import logging
 import sys
-import asyncio
 from asyncio import Semaphore
 
 
@@ -117,12 +114,13 @@ app.add_middleware(
 # Health check endpoint for AWS ECS/Fargate
 @app.get("/health")
 async def health_check():
-    """AWS health check endpoint - returns 200 if service is healthy"""
+    """AWS health check endpoint with model/captioning readiness details."""
     return {
         "status": "healthy",
         "model_loaded": model is not None,
         "captioning_enabled": ENABLE_CAPTIONING,
-        "captioning_available": captioner is not None
+        "captioning_available": captioner is not None,
+        "max_concurrent_requests": MAX_CONCURRENT_REQUESTS,
     }
 
 
@@ -184,9 +182,8 @@ def translate_caption_to_japanese(english_caption: str) -> str:
     for en, ja in translations.items():
         result = result.replace(en, ja)
     
-    # Capitalize first letter if it's a sentence
-    if result and not any(char in result for char in "あいうえおかきくけこ"):
-        # If no Japanese characters yet, keep original
+    # If translation output has no Japanese scripts, fallback to original English
+    if result and not re.search(r"[぀-ヿ㐀-䶿一-鿿]", result):
         return english_caption.strip()
     
     return result.strip()
@@ -317,11 +314,6 @@ def encode_image_to_base64(image_path: Path) -> str:
         raise FileNotFoundError("Không tìm thấy ảnh kết quả.")
     with open(image_path, "rb") as img_file:
         return base64.b64encode(img_file.read()).decode("utf-8")
-
-
-@app.get("/health")
-async def health():
-    return {"status": "ok"}
 
 
 # OPTIONS handler to satisfy CORS preflight or probes that may hit /predict/
