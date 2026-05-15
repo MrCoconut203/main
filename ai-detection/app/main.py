@@ -11,8 +11,9 @@ import os
 import time
 import logging
 import sys
-import imghdr
+import re
 
+from fastapi.concurrency import run_in_threadpool
 
 from asyncio import Semaphore
 
@@ -65,10 +66,6 @@ request_semaphore = Semaphore(MAX_CONCURRENT_REQUESTS)
 @app.on_event("startup")
 async def load_model_on_startup():
     global model, captioner, caption_processor
-    import logging
-    
-    logging.basicConfig(level=logging.INFO)
-    logger = logging.getLogger(__name__)
     
     # Load YOLO
     try:
@@ -128,12 +125,11 @@ async def health_check():
 # Simple request logging middleware to help debug Method/Path/Origin on Render
 @app.middleware("http")
 async def log_requests(request, call_next):
-    import logging
     client = request.client.host if request.client else "-"
-    logging.info("Incoming request %s %s from %s", request.method, request.url.path, client)
-    logging.debug("Request headers: %s", dict(request.headers))
+    logger.info("Incoming request %s %s from %s", request.method, request.url.path, client)
+    logger.debug("Request headers: %s", dict(request.headers))
     response = await call_next(request)
-    logging.info("Response %s %s -> %s", request.method, request.url.path, response.status_code)
+    logger.info("Response %s %s -> %s", request.method, request.url.path, response.status_code)
     return response
 
 
@@ -195,8 +191,6 @@ def generate_scene_description(img_array, detected_objects: Dict[str, int]) -> s
     Tạo mô tả chi tiết khung cảnh ảnh bằng tiếng Nhật.
     Kết hợp BLIP caption (dịch sang tiếng Nhật) và YOLO detection.
     """
-    import logging
-    
     # Translate object names to Japanese
     object_translations = {
         "person": "人", "people": "人々", "car": "車", "truck": "トラック",
@@ -248,10 +242,10 @@ def generate_scene_description(img_array, detected_objects: Dict[str, int]) -> s
             # Translate to Japanese
             caption_ja = translate_caption_to_japanese(caption_text)
             
-            logging.info(f"BLIP caption (EN): {caption_text}")
-            logging.info(f"BLIP caption (JA): {caption_ja}")
+            logger.info(f"BLIP caption (EN): {caption_text}")
+            logger.info(f"BLIP caption (JA): {caption_ja}")
         except Exception as e:
-            logging.warning(f"Failed to generate caption: {e}")
+            logger.warning(f"Failed to generate caption: {e}")
             caption_text = ""
             caption_ja = ""
     
@@ -286,27 +280,56 @@ def generate_scene_description(img_array, detected_objects: Dict[str, int]) -> s
     return " ".join(description_parts)
 
 
-def process_prediction_results(result: Any, speed_text: str) -> Tuple[Dict[str, int], str]:
-    """Xử lý kết quả từ model YOLO để lấy summary và description."""
-    # result.boxes.cls có thể là tensor; chuyển thành list
-    detected_names = []
+def run_inference_sync(img):
+    """Run CPU/GPU bound inference tasks synchronously."""
+    import cv2
+    import base64
+
+    # YOLO Prediction
+    results = model.predict(img, save=False, verbose=False)
+    result = results[0]
+
+    # Extract detected objects
+    detected_objects = {}
     try:
         detected_names = [result.names[int(c)] for c in result.boxes.cls]
+        for name in detected_names:
+            detected_objects[name] = detected_objects.get(name, 0) + 1
     except Exception:
-        # fallback: không tìm thấy boxes
-        detected_names = []
+        detected_objects = {}
 
-    summary: Dict[str, int] = {}
-    for name in detected_names:
-        summary[name] = summary.get(name, 0) + 1
+    # Get inference speed metrics
+    speed = getattr(result, "speed", {})
+    inference_speed = {
+        "preprocess": speed.get('preprocess', 0.0),
+        "inference": speed.get('inference', 0.0),
+        "postprocess": speed.get('postprocess', 0.0)
+    }
 
-    if summary:
-        object_text = ", ".join([f"{v} {k}" for k, v in summary.items()])
-        description = f"Ảnh có {object_text}. Tốc độ: {speed_text}"
+    # Generate detailed Japanese description
+    detailed_description = generate_scene_description(img, detected_objects)
+    
+    # Create YOLO summary in Japanese
+    total_objects = sum(detected_objects.values())
+    if detected_objects:
+        object_summary = "、".join([f"{k}: {v}個" for k, v in detected_objects.items()])
+        yolo_summary = f"YOLO検出: {object_summary}"
     else:
-        description = f"Không phát hiện đối tượng nào trong ảnh. Tốc độ: {speed_text}"
+        yolo_summary = "YOLO検出: 物体なし"
 
-    return summary, description
+    # Draw bounding boxes
+    plotted_img = result.plot()
+    _, buffer = cv2.imencode('.jpg', plotted_img)
+    encoded_image = base64.b64encode(buffer).decode('utf-8')
+
+    return {
+        "detailed_description": detailed_description,
+        "yolo_summary": yolo_summary,
+        "total_objects": total_objects,
+        "detected_objects": detected_objects,
+        "inference_speed": inference_speed,
+        "encoded_image": encoded_image
+    }
 
 
 def validate_and_decode_image(contents: bytes, filename: str = "uploaded"):
@@ -323,11 +346,14 @@ def validate_and_decode_image(contents: bytes, filename: str = "uploaded"):
             detail=f"File too large. Maximum allowed size is {MAX_UPLOAD_BYTES // (1024 * 1024)}MB.",
         )
 
-    detected_type = imghdr.what(None, h=contents)
-    if detected_type not in SUPPORTED_IMAGE_TYPES:
+    # Skip imghdr since it's deprecated. We'll rely on OpenCV/Pillow to validate.
+    # To pre-validate, we can quickly check if Pillow can open it.
+    try:
+        Image.open(io.BytesIO(contents)).verify()
+    except Exception:
         raise HTTPException(
             status_code=400,
-            detail=f"Unsupported image format for '{filename}'. Supported: {', '.join(sorted(SUPPORTED_IMAGE_TYPES))}",
+            detail=f"Unsupported or invalid image format for '{filename}'. Supported: {', '.join(sorted(SUPPORTED_IMAGE_TYPES))}",
         )
 
     np_buffer = np.frombuffer(contents, np.uint8)
@@ -403,55 +429,21 @@ async def predict_slash(file: UploadFile = File(...)):
             img = validate_and_decode_image(contents, file.filename or "uploaded")
             img = optimize_image_for_inference(img)
 
-            # YOLO Prediction
-            results = model.predict(img, save=False, verbose=False)
-            result = results[0]
-
-            # Extract detected objects
-            detected_objects = {}
-            try:
-                detected_names = [result.names[int(c)] for c in result.boxes.cls]
-                for name in detected_names:
-                    detected_objects[name] = detected_objects.get(name, 0) + 1
-            except Exception:
-                detected_objects = {}
-
-            # Get inference speed metrics
-            speed = getattr(result, "speed", {})
-            inference_speed = {
-                "preprocess": speed.get('preprocess', 0.0),
-                "inference": speed.get('inference', 0.0),
-                "postprocess": speed.get('postprocess', 0.0)
-            }
-
-            # Generate detailed Japanese description
-            detailed_description = generate_scene_description(img, detected_objects)
-            
-            # Create YOLO summary in Japanese
-            total_objects = sum(detected_objects.values())
-            if detected_objects:
-                object_summary = "、".join([f"{k}: {v}個" for k, v in detected_objects.items()])
-                yolo_summary = f"YOLO検出: {object_summary}"
-            else:
-                yolo_summary = "YOLO検出: 物体なし"
-
-            # Draw bounding boxes
-            plotted_img = result.plot()
-            _, buffer = cv2.imencode('.jpg', plotted_img)
-            encoded_image = base64.b64encode(buffer).decode('utf-8')
+            # Run blocking inference in a separate thread pool
+            inference_results = await run_in_threadpool(run_inference_sync, img)
 
             # Calculate total processing time
             processing_time = time.time() - start_time
 
             return PredictionResponse(
                 filename=file.filename or "uploaded_image.jpg",
-                description=detailed_description,
-                yolo_summary=yolo_summary,
-                object_count=total_objects,
-                object_details=detected_objects,
+                description=inference_results["detailed_description"],
+                yolo_summary=inference_results["yolo_summary"],
+                object_count=inference_results["total_objects"],
+                object_details=inference_results["detected_objects"],
                 processing_time=round(processing_time, 3),
-                inference_speed=inference_speed,
-                image_base64=encoded_image,
+                inference_speed=inference_results["inference_speed"],
+                image_base64=inference_results["encoded_image"],
             )
 
         except HTTPException:
