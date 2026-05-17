@@ -35,9 +35,14 @@ RUN pip install --upgrade pip
 # Install build tools to help installing some wheels
 RUN pip install --upgrade pip setuptools wheel
 
-# Install CPU-only PyTorch wheel explicitly to avoid building from source inside the image.
-# If you have CUDA-enabled environment replace this with the appropriate wheel URL.
-RUN pip install --no-cache-dir "torch==2.2.0+cpu" -f https://download.pytorch.org/whl/torch_stable.html
+# Install CPU-only PyTorch + torchvision wheels explicitly.
+# torchvision MUST match the torch version AND variant (cpu).
+# Without this, pip may pull torchvision+rocm which is incompatible with torch+cpu,
+# causing "operator torchvision::nms does not exist" at runtime.
+RUN pip install --no-cache-dir \
+    "torch==2.2.0+cpu" \
+    "torchvision==0.17.0+cpu" \
+    -f https://download.pytorch.org/whl/torch_stable.html
 
 # Now install the rest of the requirements
 RUN mkdir -p /app/.ultralytics \
