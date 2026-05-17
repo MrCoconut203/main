@@ -63,19 +63,30 @@ caption_processor = None
 request_semaphore = Semaphore(MAX_CONCURRENT_REQUESTS)
 
 
+def get_model():
+    """Khởi tạo và trả về model YOLO (hỗ trợ lazy load nếu startup lỗi)."""
+    global model
+    if model is None:
+        try:
+            from ultralytics import YOLO
+            import os
+            from pathlib import Path
+            # Đảm bảo thư mục models/ tồn tại để tránh lỗi write_file khi tải model
+            Path(MODEL_PATH).parent.mkdir(parents=True, exist_ok=True)
+            logger.info("Loading YOLO model from %s...", MODEL_PATH)
+            model = YOLO(MODEL_PATH)
+            logger.info("✓ YOLO model loaded successfully")
+        except Exception as e:
+            logger.error("Failed to load YOLO model: %s", e, exc_info=True)
+    return model
+
+
 @app.on_event("startup")
 async def load_model_on_startup():
-    global model, captioner, caption_processor
+    global captioner, caption_processor
     
     # Load YOLO
-    try:
-        from ultralytics import YOLO
-        logger.info("Loading YOLO model from %s...", MODEL_PATH)
-        model = YOLO(MODEL_PATH)
-        logger.info("✓ YOLO model loaded successfully")
-    except Exception as e:
-        logger.error("Failed to load YOLO model: %s", e, exc_info=True)
-        # Don't raise - let server start even if YOLO fails
+    get_model()
     
     # Load BLIP-2 for image captioning (optional, can be disabled via env var)
     if ENABLE_CAPTIONING:
@@ -285,8 +296,12 @@ def run_inference_sync(img):
     import cv2
     import base64
 
+    current_model = get_model()
+    if current_model is None:
+        raise Exception("YOLO model could not be initialized.")
+
     # YOLO Prediction
-    results = model.predict(img, save=False, verbose=False)
+    results = current_model.predict(img, save=False, verbose=False)
     result = results[0]
 
     # Extract detected objects
@@ -416,8 +431,9 @@ async def predict_slash(file: UploadFile = File(...)):
     """
     # Acquire semaphore to limit concurrent requests
     async with request_semaphore:
-        if model is None:
-            raise HTTPException(status_code=503, detail="Model not loaded yet")
+        current_model = get_model()
+        if current_model is None:
+            raise HTTPException(status_code=503, detail="Model not loaded yet and could not be initialized")
 
         start_time = time.time()
         

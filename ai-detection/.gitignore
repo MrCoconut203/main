@@ -12,6 +12,7 @@ env/
 
 # Model files (large binaries - use Git LFS if needed)
 models/*.pt
+!models/yolov8s.pt
 models/*.pth
 models/*.onnx
 
