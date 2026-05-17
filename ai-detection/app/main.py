@@ -57,6 +57,9 @@ class PredictionResponse(BaseModel):
 
 
 app = FastAPI()
+# Mount folder frontend (contains index.html, bg.png, css, js...)
+app.mount("/", StaticFiles(directory=pathlib.Path(__file__).parent.parent / "frontend", html=True), name="frontend")
+
 
 # Models loaded at startup
 model = None
