@@ -30,7 +30,10 @@ logger = logging.getLogger(__name__)
 
 
 # --- Cấu hình ---
-MODEL_PATH = os.getenv("MODEL_PATH", "models/yolov8s.pt")
+# Tính đường dẫn tuyệt đối từ vị trí file main.py để không phụ thuộc vào CWD
+_BASE_DIR = Path(__file__).resolve().parent.parent  # ai-detection/
+_DEFAULT_MODEL_PATH = str(_BASE_DIR / "models" / "yolov8s.pt")
+MODEL_PATH = os.getenv("MODEL_PATH", _DEFAULT_MODEL_PATH)
 ALLOWED_ORIGINS = os.getenv("CORS_ORIGINS", "*")
 # Disable BLIP-2 by default for AWS to save cost (set to "true" to enable)
 ENABLE_CAPTIONING = os.getenv("ENABLE_CAPTIONING", "false").lower() == "true"
@@ -86,6 +89,9 @@ async def load_model_on_startup():
     global captioner, caption_processor
     
     # Load YOLO
+    logger.info("CWD: %s", os.getcwd())
+    logger.info("MODEL_PATH resolved to: %s", MODEL_PATH)
+    logger.info("Model file exists: %s", os.path.isfile(MODEL_PATH))
     get_model()
     
     # Load BLIP-2 for image captioning (optional, can be disabled via env var)
