@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI 物体検出 — Cute Tech Vision</title>
+  <meta name="description" content="Upload images and detect objects using YOLOv8 AI. Kawaii cyberpunk interface by Dinh Tien Cuong.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Comfortaa:wght@400;600;700&family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --green-primary: #22c55e;
+      --green-light: #86efac;
+      --green-softest: #bbf7d0;
+      --green-glow: rgba(34,197,94,0.35);
+      --glass-bg: rgba(255,255,255,0.55);
+      --glass-border: rgba(255,255,255,0.35);
+      --text-dark: #1a2e1a;
+      --text-mid: #4a5e4a;
+      --text-light: #8a9e8a;
+      --card-bg: rgba(255,255,255,0.7);
+      --radius-xl: 24px;
+      --radius-lg: 16px;
+      --radius-md: 12px;
+    }
+
+    *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+
+    body {
+      font-family: 'Quicksand', 'Comfortaa', sans-serif;
+      min-height: 100vh;
+      background: #0a1a0f;
+      overflow-x: hidden;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    /* ── Background ── */
+    .bg-layer {
+      position: fixed; inset:0; z-index:0;
+      background: url('bg.png') center/cover no-repeat;
+    }
+    .bg-overlay {
+      position: fixed; inset:0; z-index:1;
+      background: linear-gradient(160deg, rgba(10,26,15,0.55) 0%, rgba(10,26,15,0.35) 50%, rgba(10,26,15,0.6) 100%);
+      backdrop-filter: blur(3px);
+    }
+
+    /* ── Floating particles ── */
+    .particles { position:fixed; inset:0; z-index:2; pointer-events:none; overflow:hidden; }
+    .particle {
+      position:absolute; border-radius:50%; background:var(--green-light); opacity:0;
+      animation: floatUp linear infinite;
+    }
+    @keyframes floatUp {
+      0%   { opacity:0; transform:translateY(100vh) scale(0); }
+      10%  { opacity:0.6; }
+      90%  { opacity:0.3; }
+      100% { opacity:0; transform:translateY(-10vh) scale(1); }
+    }
+
+    /* ── Main container ── */
+    .main-wrap {
+      position:relative; z-index:10; width:100%; max-width:680px;
+      margin: 40px 16px 80px; padding:0;
+      display:flex; flex-direction:column; gap:0;
+    }
+
+    .glass-card {
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      backdrop-filter: blur(22px) saturate(1.4);
+      -webkit-backdrop-filter: blur(22px) saturate(1.4);
+      border-radius: var(--radius-xl);
+      box-shadow: 0 8px 32px rgba(0,0,0,0.18), 0 0 60px rgba(34,197,94,0.06);
+      padding: 36px 32px;
+    }
+
+    /* ── Header ── */
+    .header { text-align:center; margin-bottom:6px; padding-bottom:24px; border-bottom:1px solid rgba(34,197,94,0.15); }
+    .logo-icon {
+      display:inline-flex; align-items:center; justify-content:center;
+      width:56px; height:56px; border-radius:50%;
+      background: linear-gradient(135deg, var(--green-primary), #16a34a);
+      box-shadow: 0 0 20px var(--green-glow), 0 0 40px rgba(34,197,94,0.15);
+      font-size:26px; margin-bottom:14px;
+      animation: pulse-glow 2.5s ease-in-out infinite;
+    }
+    @keyframes pulse-glow {
+      0%,100% { box-shadow: 0 0 20px var(--green-glow), 0 0 40px rgba(34,197,94,0.12); transform:scale(1); }
+      50%     { box-shadow: 0 0 28px var(--green-glow), 0 0 56px rgba(34,197,94,0.22); transform:scale(1.06); }
+    }
+    .header h1 {
+      font-family:'Comfortaa',sans-serif; font-size:1.75rem; font-weight:700;
+      color: var(--text-dark); letter-spacing:-0.02em; margin-bottom:6px;
+    }
+    .header p { font-size:0.92rem; color:var(--text-mid); font-weight:500; }
+
+    /* ── Dropzone ── */
+    .dropzone-area { margin-top:24px; }
+    .dropzone {
+      position:relative; border:2.5px dashed rgba(34,197,94,0.35); border-radius:var(--radius-lg);
+      padding:40px 20px; text-align:center; cursor:pointer;
+      background: rgba(187,247,208,0.08);
+      transition: all 0.35s cubic-bezier(.4,0,.2,1);
+    }
+    .dropzone:hover, .dropzone.dragover {
+      border-color: var(--green-primary); border-style:solid;
+      background: rgba(187,247,208,0.18);
+      transform: scale(1.015);
+      box-shadow: 0 0 24px rgba(34,197,94,0.18);
+    }
+    .dropzone-icon { font-size:42px; margin-bottom:10px; display:block; }
+    .dropzone-text { font-size:0.95rem; color:var(--text-mid); font-weight:500; }
+    .dropzone-text span { color:var(--green-primary); font-weight:700; text-decoration:underline; cursor:pointer; }
+    .dropzone input[type="file"] { display:none; }
+    .file-name {
+      margin-top:10px; font-size:0.82rem; color:var(--green-primary); font-weight:600;
+      opacity:0; transition: opacity 0.3s;
+    }
+    .file-name.show { opacity:1; }
+
+    /* ── Preview + Scan ── */
+    .preview-wrap {
+      display:none; position:relative; border-radius:var(--radius-lg); overflow:hidden;
+      margin-top:24px; box-shadow: 0 4px 20px rgba(0,0,0,0.12);
+    }
+    .preview-wrap.show { display:block; }
+    .preview-wrap img { width:100%; display:block; border-radius:var(--radius-lg); }
+    .scan-line {
+      display:none; position:absolute; left:0; width:100%; height:4px;
+      background: linear-gradient(90deg, transparent, var(--green-primary), var(--green-light), var(--green-primary), transparent);
+      box-shadow: 0 0 20px var(--green-glow), 0 0 40px rgba(34,197,94,0.15);
+      z-index:5; animation: scan 1.8s ease-in-out infinite;
+    }
+    .scan-line.active { display:block; }
+    @keyframes scan {
+      0%   { top:0; opacity:0.6; }
+      50%  { top:calc(100% - 4px); opacity:1; }
+      100% { top:0; opacity:0.6; }
+    }
+
+    /* ── Submit button ── */
+    .submit-btn {
+      margin-top:20px; width:100%; padding:15px; border:none; border-radius:50px;
+      font-family:'Comfortaa',sans-serif; font-size:1.05rem; font-weight:700;
+      color:#fff; cursor:pointer; letter-spacing:0.03em;
+      background: linear-gradient(135deg, var(--green-primary), #16a34a);
+      box-shadow: 0 4px 18px rgba(34,197,94,0.35);
+      transition: all 0.3s cubic-bezier(.4,0,.2,1);
+    }
+    .submit-btn:hover:not(:disabled) {
+      transform:translateY(-2px); box-shadow: 0 6px 24px rgba(34,197,94,0.5);
+    }
+    .submit-btn:active:not(:disabled) { transform:translateY(0); }
+    .submit-btn:disabled { opacity:0.5; cursor:not-allowed; transform:none; }
+
+    /* ── Loading ── */
+    .loading-section { display:none; text-align:center; margin-top:24px; }
+    .loading-section.active { display:block; }
+    .loader-ring {
+      width:52px; height:52px; margin:0 auto 14px; border:4px solid rgba(34,197,94,0.15);
+      border-top-color:var(--green-primary); border-radius:50%;
+      animation: spin 0.9s linear infinite;
+    }
+    @keyframes spin { to { transform:rotate(360deg); } }
+    .loading-text { color:var(--green-primary); font-weight:600; font-size:0.95rem; }
+
+    /* ── Results ── */
+    .results-panel {
+      display:none; margin-top:28px; border-radius:var(--radius-xl);
+      background: var(--glass-bg); border:1px solid var(--glass-border);
+      backdrop-filter: blur(18px); padding:28px 24px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.12);
+      animation: slideUp 0.5s cubic-bezier(.4,0,.2,1);
+    }
+    .results-panel.show { display:block; }
+    @keyframes slideUp {
+      from { opacity:0; transform:translateY(24px); }
+      to   { opacity:1; transform:translateY(0); }
+    }
+
+    .result-title {
+      font-family:'Comfortaa',sans-serif; font-size:1.05rem; font-weight:700;
+      color:var(--text-dark); margin-bottom:16px; line-height:1.5;
+    }
+
+    .yolo-badge {
+      display:inline-flex; align-items:center; gap:6px; padding:8px 16px;
+      border-radius:50px; background:rgba(34,197,94,0.12); border:1px solid rgba(34,197,94,0.2);
+      font-size:0.85rem; font-weight:600; color:var(--green-primary); margin-bottom:18px;
+    }
+
+    .metrics-row {
+      display:grid; grid-template-columns: repeat(auto-fit, minmax(130px,1fr)); gap:10px;
+      margin-bottom:20px;
+    }
+    .metric-card {
+      background:var(--card-bg); border-radius:var(--radius-md); padding:14px;
+      border:1px solid rgba(34,197,94,0.1); text-align:center;
+      transition: transform 0.25s, box-shadow 0.25s;
+    }
+    .metric-card:hover { transform:translateY(-2px); box-shadow:0 4px 12px rgba(34,197,94,0.12); }
+    .metric-card .label { font-size:0.72rem; color:var(--text-light); font-weight:600; text-transform:uppercase; letter-spacing:0.04em; margin-bottom:4px; }
+    .metric-card .value { font-size:1.15rem; font-weight:700; color:var(--green-primary); }
+
+    /* Object detection bars */
+    .object-bars { margin-bottom:18px; display:flex; flex-direction:column; gap:8px; }
+    .obj-bar-item { display:flex; align-items:center; gap:10px; }
+    .obj-bar-name { font-size:0.82rem; font-weight:600; color:var(--text-dark); min-width:90px; text-align:right; }
+    .obj-bar-track { flex:1; height:22px; background:rgba(34,197,94,0.08); border-radius:50px; overflow:hidden; position:relative; }
+    .obj-bar-fill {
+      height:100%; border-radius:50px; background:linear-gradient(90deg, var(--green-primary), var(--green-light));
+      box-shadow: 0 0 10px var(--green-glow);
+      width:0; transition: width 1s cubic-bezier(.4,0,.2,1);
+    }
+    .obj-bar-count {
+      font-size:0.78rem; font-weight:700; color:var(--green-primary); min-width:30px;
+    }
+
+    .result-image { width:100%; border-radius:var(--radius-lg); box-shadow:0 4px 16px rgba(0,0,0,0.1); }
+
+    /* Action buttons in results panel */
+    .actions-row {
+      display: flex; gap: 14px; margin-top: 24px;
+    }
+    .download-btn {
+      flex: 2; padding: 14px 20px; border: none; border-radius: 50px;
+      font-family: 'Comfortaa', sans-serif; font-size: 1rem; font-weight: 700;
+      color: #fff; cursor: pointer; letter-spacing: 0.02em;
+      background: linear-gradient(135deg, var(--green-primary), #16a34a);
+      box-shadow: 0 4px 18px rgba(34,197,94,0.35);
+      transition: all 0.3s cubic-bezier(.4,0,.2,1);
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+    }
+    .download-btn:hover {
+      transform: translateY(-2px); box-shadow: 0 6px 24px rgba(34,197,94,0.5);
+    }
+    .download-btn:active { transform: translateY(0); }
+
+    .reset-btn {
+      flex: 1; padding: 14px 20px; border: 1px solid var(--glass-border); border-radius: 50px;
+      font-family: 'Comfortaa', sans-serif; font-size: 1rem; font-weight: 700;
+      color: var(--text-dark); cursor: pointer; letter-spacing: 0.02em;
+      background: rgba(255, 255, 255, 0.25);
+      transition: all 0.3s cubic-bezier(.4,0,.2,1);
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+    }
+    .reset-btn:hover {
+      background: rgba(255, 255, 255, 0.45); transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    }
+    .reset-btn:active { transform: translateY(0); }
+
+    @media(max-width:480px) {
+      .actions-row { flex-direction: column; gap: 10px; }
+    }
+
+    /* ── Footer ── */
+    .footer {
+      position:fixed; bottom:0; left:0; right:0; z-index:20;
+      text-align:center; padding:12px; font-size:0.75rem; color:rgba(255,255,255,0.45);
+      font-weight:500; background:linear-gradient(to top, rgba(10,26,15,0.7), transparent);
+      letter-spacing:0.02em;
+    }
+
+    /* ── Responsive ── */
+    @media(max-width:640px) {
+      .main-wrap { margin:20px 10px 70px; }
+      .glass-card { padding:24px 18px; }
+      .header h1 { font-size:1.35rem; }
+      .metrics-row { grid-template-columns: repeat(2,1fr); }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="bg-layer"></div>
+  <div class="bg-overlay"></div>
+
+  <!-- Floating particles -->
+  <div class="particles" id="particles"></div>
+
+  <!-- Main Content -->
+  <div class="main-wrap">
+    <div class="glass-card">
+
+      <!-- Header -->
+      <div class="header">
+        <div class="logo-icon">👁️</div>
+        <h1>AI 物体検出</h1>
+        <p>画像をドロップして、AIが物体を検出します ✨</p>
+      </div>
+
+      <!-- Upload Form -->
+      <form id="uploadForm" autocomplete="off">
+        <div class="dropzone-area">
+          <div class="dropzone" id="dropzone">
+            <span class="dropzone-icon">📂</span>
+            <div class="dropzone-text"><span>クリックして選択</span> またはドラッグ＆ドロップ</div>
+            <div class="file-name" id="fileName"></div>
+            <input type="file" id="fileInput" accept="image/*" required>
+          </div>
+        </div>
+
+        <!-- Image Preview -->
+        <div class="preview-wrap" id="previewWrap">
+          <img id="previewImg" src="" alt="プレビュー">
+          <div class="scan-line" id="scanLine"></div>
+        </div>
+
+        <button type="submit" class="submit-btn" id="submitBtn">🚀 検出開始</button>
+      </form>
+
+      <!-- Loading -->
+      <div class="loading-section" id="loading">
+        <div class="loader-ring"></div>
+        <div class="loading-text">AIが分析中...</div>
+      </div>
+    </div>
+
+    <!-- Results Panel -->
+    <div class="results-panel" id="resultPanel">
+      <div class="result-title" id="resultDescription"></div>
+      <div class="yolo-badge" id="yoloBadge">✅ <span id="yoloSummary"></span></div>
+
+      <div class="object-bars" id="objectBars"></div>
+
+      <div class="metrics-row">
+        <div class="metric-card"><div class="label">検出数</div><div class="value" id="objectCount">0</div></div>
+        <div class="metric-card"><div class="label">処理時間</div><div class="value" id="processingTime">0s</div></div>
+        <div class="metric-card"><div class="label">前処理</div><div class="value" id="preprocessSpeed">0ms</div></div>
+        <div class="metric-card"><div class="label">推論</div><div class="value" id="inferenceSpeed">0ms</div></div>
+        <div class="metric-card"><div class="label">後処理</div><div class="value" id="postprocessSpeed">0ms</div></div>
+      </div>
+
+      <img class="result-image" id="resultImage" src="" alt="検出結果">
+
+      <!-- Action buttons -->
+      <div class="actions-row">
+        <button type="button" class="download-btn" id="downloadBtn">📥 検出結果をダウンロード</button>
+        <button type="button" class="reset-btn" id="resetBtn">🔄 新しい画像</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <div class="footer">Powered by Dinh Tien Cuong. All rights reserved.</div>
+
+  <script>
+    // Global state for downloading
+    let currentBase64 = null;
+    let currentFileName = "result_image.jpg";
+
+    // ── Particles ──
+    (function(){
+      const c = document.getElementById('particles');
+      for(let i=0;i<18;i++){
+        const p = document.createElement('div');
+        p.className='particle';
+        const s = Math.random()*4+2;
+        p.style.cssText=`width:${s}px;height:${s}px;left:${Math.random()*100}%;animation-duration:${Math.random()*8+6}s;animation-delay:${Math.random()*6}s;`;
+        c.appendChild(p);
+      }
+    })();
+
+    // ── Dropzone logic ──
+    const dropzone = document.getElementById('dropzone');
+    const fileInput = document.getElementById('fileInput');
+    const fileNameEl = document.getElementById('fileName');
+    const previewWrap = document.getElementById('previewWrap');
+    const previewImg = document.getElementById('previewImg');
+    const scanLine = document.getElementById('scanLine');
+
+    dropzone.addEventListener('click', () => fileInput.click());
+    dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('dragover'); });
+    dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+    dropzone.addEventListener('drop', e => {
+      e.preventDefault(); dropzone.classList.remove('dragover');
+      if(e.dataTransfer.files.length){ fileInput.files = e.dataTransfer.files; handleFileSelect(); }
+    });
+    fileInput.addEventListener('change', handleFileSelect);
+
+    function handleFileSelect(){
+      const file = fileInput.files[0];
+      if(!file) return;
+      fileNameEl.textContent = '📎 ' + file.name;
+      fileNameEl.classList.add('show');
+      const reader = new FileReader();
+      reader.onload = e => {
+        previewImg.src = e.target.result;
+        previewWrap.classList.add('show');
+        dropzone.style.display='none';
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function resetUpload(){
+      dropzone.style.display='';
+      previewWrap.classList.remove('show');
+      scanLine.classList.remove('active');
+      fileNameEl.classList.remove('show');
+      fileInput.value='';
+    }
+
+    // ── Form submit ──
+    document.getElementById('uploadForm').onsubmit = async (e) => {
+      e.preventDefault();
+      const file = fileInput.files[0];
+      if(!file){ alert('画像ファイルを選択してください！'); return; }
+
+      const loading = document.getElementById('loading');
+      const resultPanel = document.getElementById('resultPanel');
+      const btn = document.getElementById('submitBtn');
+
+      loading.classList.add('active');
+      resultPanel.classList.remove('show');
+      btn.disabled = true;
+      scanLine.classList.add('active');
+
+      const fd = new FormData();
+      fd.append('file', file);
+      const ctrl = new AbortController();
+      const tid = setTimeout(() => ctrl.abort(), 180000);
+
+      try {
+        const res = await fetch('/predict/', { method:'POST', body:fd, signal:ctrl.signal });
+        clearTimeout(tid);
+        loading.classList.remove('active');
+        btn.disabled = false;
+        scanLine.classList.remove('active');
+
+        if(!res.ok){
+          let t = await res.text();
+          try{ t = JSON.stringify(JSON.parse(t),null,2); }catch(x){}
+          alert('サーバーエラー '+res.status+': '+t);
+          return;
+        }
+
+        const data = await res.json();
+        resultPanel.classList.add('show');
+
+        document.getElementById('resultDescription').innerText = data.description || '検出結果なし';
+        document.getElementById('yoloSummary').innerText = data.yolo_summary || 'YOLO検出: 物体なし';
+        document.getElementById('objectCount').innerText = data.object_count || 0;
+        document.getElementById('processingTime').innerText = (data.processing_time||0).toFixed(2)+'s';
+
+        if(data.inference_speed){
+          document.getElementById('preprocessSpeed').innerText = (data.inference_speed.preprocess||0).toFixed(1)+'ms';
+          document.getElementById('inferenceSpeed').innerText = (data.inference_speed.inference||0).toFixed(1)+'ms';
+          document.getElementById('postprocessSpeed').innerText = (data.inference_speed.postprocess||0).toFixed(1)+'ms';
+        }
+
+        // Animated object bars
+        const barsEl = document.getElementById('objectBars');
+        barsEl.innerHTML = '';
+        if(data.object_details){
+          const maxCount = Math.max(...Object.values(data.object_details), 1);
+          Object.entries(data.object_details).forEach(([name, count], i) => {
+            const pct = Math.round((count/maxCount)*100);
+            const row = document.createElement('div');
+            row.className='obj-bar-item';
+            row.innerHTML = `<div class="obj-bar-name">${name}</div><div class="obj-bar-track"><div class="obj-bar-fill" id="bar${i}"></div></div><div class="obj-bar-count">${count}</div>`;
+            barsEl.appendChild(row);
+            requestAnimationFrame(() => {
+              setTimeout(() => { document.getElementById('bar'+i).style.width = pct+'%'; }, 80*i);
+            });
+          });
+        }
+
+        if(data.image_base64){
+          const rImg = document.getElementById('resultImage');
+          rImg.src = 'data:image/jpeg;base64,'+data.image_base64;
+          rImg.style.display='block';
+          // Also update preview
+          previewImg.src = rImg.src;
+
+          // Save base64 and filename for download
+          currentBase64 = data.image_base64;
+          currentFileName = 'result_' + (file.name || 'image.jpg');
+        }
+
+      } catch(err){
+        clearTimeout(tid);
+        loading.classList.remove('active');
+        btn.disabled=false;
+        scanLine.classList.remove('active');
+        if(err.name==='AbortError'){ alert('タイムアウト (>180秒)。小さい画像で再試行してください。'); }
+        else{ alert('リクエスト失敗: '+err.message); }
+      }
+    };
+    // Download button event
+    document.getElementById('downloadBtn').onclick = () => {
+      if(!currentBase64) return;
+      const link = document.createElement('a');
+      link.href = 'data:image/jpeg;base64,' + currentBase64;
+      link.download = currentFileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    };
+
+    // Reset button event
+    document.getElementById('resetBtn').onclick = () => {
+      document.getElementById('resultPanel').classList.remove('show');
+      resetUpload();
+      // Scroll smoothly back to top of form
+      document.getElementById('uploadForm').scrollIntoView({ behavior: 'smooth' });
+    };
+  </script>
+</body>
+</html>

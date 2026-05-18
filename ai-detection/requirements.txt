@@ -1,0 +1,24 @@
+
+fastapi==0.95.2
+uvicorn[standard]==0.22.0
+python-multipart==0.0.6
+# Allow a compatible ultralytics version to be selected from PyPI
+ultralytics>=8.0.0,<9.0
+
+# NOTE: ultralytics depends on PyTorch. Installing torch can be platform-specific.
+# For a CPU-only build we pin the CPU wheel. If you have CUDA, replace this with a
+# matching CUDA wheel from https://download.pytorch.org/whl/torch_stable.html
+# The Dockerfile installs this wheel before installing the rest of requirements.
+# Do NOT add torch here; it's installed explicitly in the Dockerfile to ensure
+# pip pulls the correct prebuilt wheel instead of trying to build from source.
+# Use headless OpenCV on the server to avoid GUI dependencies and reduce conflicts.
+opencv-python-headless==4.8.0.76
+
+# Image captioning for detailed scene descriptions
+transformers>=4.30.0
+pillow>=9.0.0
+sentencepiece>=0.1.99
+accelerate>=0.20.0
+
+# AWS SDK for S3 model download (optional, only if using S3_MODEL_URI)
+boto3>=1.28.0
