@@ -1,23 +1,24 @@
-# Virtual Environment
-/venv/
-.venv/
-env/
-*.venv
-
-# Python cache
+# Python
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
+*.pyc
+venv/
+.venv/
+env/
+.env
+.env.local
 
-# Model files (large binaries)
-*.pt
-*.pth
-*.onnx
+# Model files (large binaries - use Git LFS if needed)
+models/*.pt
+!models/yolov8s.pt
+models/*.pth
+models/*.onnx
 
-# Jupyter
-.ipynb_checkpoints/
-*.ipynb
+# Ultralytics temp/runs
+runs/
+temp/
 
 # IDE / Editor
 .vscode/
@@ -30,15 +31,24 @@ __pycache__/
 .DS_Store
 Thumbs.db
 
-# Logs
-*.log
-
-# Environment variables
-.env
-.env.local
+# Docker / Deploy
+certs/
 
 # Distribution / packaging
 build/
 dist/
 *.egg-info/
+
+# Logs
+*.log
+web-last.log
+build-plain.log
+
+# Backup
+*.bak
+*.md.bak
+
+# Test coverage
+.coverage
+htmlcov/
 
