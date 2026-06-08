@@ -52,3 +52,5 @@ build-plain.log
 .coverage
 htmlcov/
 
+.vscode 
+*.vscode

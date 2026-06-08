@@ -58,7 +58,7 @@ class PredictionResponse(BaseModel):
 
 app = FastAPI()
 # Mount folder frontend (contains index.html, bg.png, css, js...)
-app.mount("/", StaticFiles(directory=pathlib.Path(__file__).parent.parent / "frontend", html=True), name="frontend")
+#app.mount("/", StaticFiles(directory=Path(__file__).parent.parent / "frontend", html=True), name="frontend")
 
 # Models loaded at startup
 model = None
@@ -414,9 +414,9 @@ async def predict_options_slash():
     return PlainTextResponse("ok", status_code=200)
 
 
-@app.options("/predict")
-async def predict_options_no_slash():
-    return PlainTextResponse("ok", status_code=200)
+#@app.options("/predict")
+#async def predict_options_no_slash():
+#    return PlainTextResponse("ok", status_code=200)
 
 
 @app.get("/predict/")
@@ -425,9 +425,9 @@ async def predict_get_slash():
     return {"detail": "Use POST /predict/ with multipart/form-data field 'file' to upload an image."}
 
 
-@app.get("/predict")
-async def predict_get_no_slash():
-    return {"detail": "Use POST /predict/ with multipart/form-data field 'file' to upload an image."}
+#@app.get("/predict")
+#async def predict_get_no_slash():
+ #   return {"detail": "Use POST /predict/ with multipart/form-data field 'file' to upload an image."}
 
 
 @app.post("/predict/", response_model=PredictionResponse)
@@ -475,10 +475,10 @@ async def predict_slash(file: UploadFile = File(...)):
         except Exception as e:
             logger.error("Inference error: %s", e, exc_info=True)
             raise HTTPException(status_code=500, detail=f"画像処理中にエラーが発生しました: {str(e)}")
-@app.post("/predict", response_model=PredictionResponse)
-async def predict_no_slash(file: UploadFile = File(...)):
-    """Redirect to main handler with trailing slash for consistency"""
-    return await predict_slash(file)
+#@app.post("/predict", response_model=PredictionResponse)
+#async def predict_no_slash(file: UploadFile = File(...)):
+#    """Redirect to main handler with trailing slash for consistency"""
+#    return await predict_slash(file)
 
 
 # ============================================================================
