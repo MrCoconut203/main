@@ -22,7 +22,7 @@ RUN pip install --upgrade pip setuptools wheel && \
     "torchvision==0.17.0+cpu" \
     -f https://download.pytorch.org/whl/torch_stable.html && \
     mkdir -p /app/.ultralytics && \
-    pip install --no-cache-dir -r requirements.txt -c constraints.txt
+    pip install --no-cache-dir -r requirements.txt 
 
 # 4. Copy toàn bộ code (Thay đổi thường xuyên nhất - để ở dưới cùng)
 COPY . .
