@@ -14,7 +14,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # 3. Cài đặt Python Dependencies (Tách riêng để cache)
 # Chỉ copy những file cần thiết cho việc cài đặt thư viện
-COPY requirements.txt constraints.txt ./
+COPY requirements.txt ./
 
 RUN pip install --upgrade pip setuptools wheel && \
     pip install --no-cache-dir \
